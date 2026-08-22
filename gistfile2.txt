@@ -1,0 +1,817 @@
+-- XENO MENU - ТЕЛЕПОРТ + ИГРОК + КАСТОМИЗАЦИЯ
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+-- === ПЕРЕМЕННЫЕ ===
+local FlySpeed = 50
+local FlyEnabled = false
+local FlyMode = "Свободный"
+local FlyBV = nil
+local FlyBG = nil
+local FlyConn = nil
+local MenuColor = Color3.fromRGB(28, 28, 33)
+local MenuTransparency = 0.05
+local AccentColor = Color3.fromRGB(100, 100, 130)
+local Gravity = 196.2
+local WalkSpeed = 16
+local JumpPower = 50
+local PlayerGravity = 196.2
+
+-- === ФУНКЦИИ ПОЛЕТА ===
+local function StartFly()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChild("Humanoid")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not hum or not root then return end
+    
+    hum.PlatformStand = true
+    workspace.Gravity = 0
+    
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.Parent = root
+    
+    local bg = Instance.new("BodyGyro")
+    bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bg.CFrame = root.CFrame
+    bg.Parent = root
+    
+    FlyBV = bv
+    FlyBG = bg
+    FlyEnabled = true
+    
+    FlyConn = RunService.Heartbeat:Connect(function()
+        if not FlyEnabled then return end
+        local rootPart = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then return end
+        
+        local move = Vector3.new(0, 0, 0)
+        local cam = workspace.CurrentCamera
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then 
+            move = move + cam.CFrame.LookVector * Vector3.new(1, 0, 1) 
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then 
+            move = move - cam.CFrame.LookVector * Vector3.new(1, 0, 1) 
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then 
+            move = move - cam.CFrame.RightVector 
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then 
+            move = move + cam.CFrame.RightVector 
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then 
+            move = move + Vector3.new(0, 1, 0) 
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then 
+            move = move - Vector3.new(0, 1, 0) 
+        end
+        
+        if move.Magnitude > 0 then 
+            move = move.Unit * FlySpeed 
+        end
+        
+        if FlyMode == "Свободный" then
+            FlyBV.Velocity = move
+            FlyBG.CFrame = cam.CFrame
+        elseif FlyMode == "По курсору" then
+            local mouse = LocalPlayer:GetMouse()
+            if mouse then
+                local target = mouse.Hit.Position
+                local dir = (target - rootPart.Position).Unit
+                FlyBV.Velocity = dir * FlySpeed
+                FlyBG.CFrame = CFrame.lookAt(rootPart.Position, target)
+            end
+        elseif FlyMode == "По взгляду" then
+            FlyBV.Velocity = cam.CFrame.LookVector * FlySpeed + move
+            FlyBG.CFrame = cam.CFrame
+        end
+    end)
+end
+
+local function StopFly()
+    FlyEnabled = false
+    if FlyConn then FlyConn:Disconnect() FlyConn = nil end
+    if FlyBV then FlyBV:Destroy() FlyBV = nil end
+    if FlyBG then FlyBG:Destroy() FlyBG = nil end
+    
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end
+    workspace.Gravity = PlayerGravity
+end
+
+-- === ПРИМЕНЕНИЕ ХАРАКТЕРИСТИК ===
+local function ApplyCharacteristics()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChild("Humanoid")
+    if hum then
+        hum.WalkSpeed = WalkSpeed
+        hum.JumpPower = JumpPower
+    end
+    workspace.Gravity = PlayerGravity
+end
+
+-- === ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ КОМАНДЫ ===
+local function GetPlayerTeam(player)
+    if player.Team then
+        return player.Team.Name
+    elseif player.TeamColor and player.TeamColor ~= BrickColor.new("Medium stone grey") then
+        return tostring(player.TeamColor)
+    else
+        return "Нет команды"
+    end
+end
+
+-- === ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ ЦВЕТА КОМАНДЫ ===
+local function GetTeamColor(player)
+    if player.Team then
+        return player.Team.TeamColor.Color
+    elseif player.TeamColor then
+        return player.TeamColor.Color
+    else
+        return Color3.fromRGB(170, 170, 180)
+    end
+end
+
+-- === ФУНКЦИЯ ДЛЯ СКРУГЛЕНИЯ ===
+local function ApplyCorner(element, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius or 8)
+    corner.Parent = element
+end
+
+-- === СОЗДАНИЕ GUI ===
+local function CreateMenu()
+    if _G.MenuGUI then
+        _G.MenuGUI:Destroy()
+        _G.MenuGUI = nil
+    end
+    
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "XenoMenu"
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    ScreenGui.ResetOnSpawn = false
+    _G.MenuGUI = ScreenGui
+    
+    local Colors = {
+        BG = MenuColor,
+        BG2 = Color3.fromRGB(38, 38, 43),
+        BG3 = Color3.fromRGB(48, 48, 53),
+        Border = Color3.fromRGB(70, 70, 80),
+        Accent = AccentColor,
+        Accent2 = Color3.fromRGB(130, 130, 170),
+        Text = Color3.fromRGB(235, 235, 240),
+        TextDim = Color3.fromRGB(170, 170, 180),
+        Green = Color3.fromRGB(0, 200, 100),
+        Red = Color3.fromRGB(200, 60, 60),
+        Yellow = Color3.fromRGB(200, 200, 60)
+    }
+    
+    -- ОСНОВНОЙ ФРЕЙМ
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Parent = ScreenGui
+    MainFrame.BackgroundColor3 = Colors.BG
+    MainFrame.BackgroundTransparency = MenuTransparency
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Size = UDim2.new(0, 420, 0, 540)
+    MainFrame.Position = UDim2.new(0.5, -210, 0.5, -270)
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.ClipsDescendants = true
+    MainFrame.ZIndex = 999
+    ApplyCorner(MainFrame, 12)
+    
+    -- ЗАГОЛОВОК
+    local Header = Instance.new("Frame")
+    Header.Parent = MainFrame
+    Header.BackgroundColor3 = Colors.Accent
+    Header.BackgroundTransparency = 0.3
+    Header.BorderSizePixel = 0
+    Header.Size = UDim2.new(1, 0, 0, 40)
+    Header.ZIndex = 1000
+    ApplyCorner(Header, 12)
+    
+    local Title = Instance.new("TextLabel")
+    Title.Parent = Header
+    Title.BackgroundTransparency = 1
+    Title.Size = UDim2.new(1, -50, 1, 0)
+    Title.Position = UDim2.new(0, 15, 0, 0)
+    Title.Text = "XENO MENU"
+    Title.TextColor3 = Colors.Text
+    Title.TextSize = 17
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    Title.Font = Enum.Font.GothamBold
+    Title.ZIndex = 1001
+    
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Parent = Header
+    CloseBtn.BackgroundColor3 = Colors.Red
+    CloseBtn.BackgroundTransparency = 0.3
+    CloseBtn.BorderSizePixel = 0
+    CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+    CloseBtn.Position = UDim2.new(1, -36, 0, 6)
+    CloseBtn.Text = "X"
+    CloseBtn.TextColor3 = Colors.Text
+    CloseBtn.TextSize = 16
+    CloseBtn.Font = Enum.Font.GothamBold
+    CloseBtn.ZIndex = 1001
+    ApplyCorner(CloseBtn, 14)
+    CloseBtn.MouseButton1Click:Connect(function()
+        if FlyEnabled then StopFly() end
+        ScreenGui:Destroy()
+        _G.MenuGUI = nil
+    end)
+    
+    -- ТАБЫ
+    local TabContainer = Instance.new("Frame")
+    TabContainer.Parent = MainFrame
+    TabContainer.BackgroundColor3 = Colors.BG2
+    TabContainer.BackgroundTransparency = 0.5
+    TabContainer.BorderSizePixel = 0
+    TabContainer.Size = UDim2.new(1, 0, 0, 40)
+    TabContainer.Position = UDim2.new(0, 0, 0, 40)
+    TabContainer.ZIndex = 1000
+    
+    local tabs = {}
+    local tabNames = {"Телепорт", "Игрок", "Кастомизация"}
+    
+    for i, name in ipairs(tabNames) do
+        local btn = Instance.new("TextButton")
+        btn.Parent = TabContainer
+        btn.BackgroundColor3 = (i == 1) and Colors.Accent or Colors.BG3
+        btn.BackgroundTransparency = (i == 1) and 0.1 or 0.2
+        btn.BorderSizePixel = 0
+        btn.Size = UDim2.new(0.333, -2, 1, -6)
+        btn.Position = UDim2.new((i - 1) * 0.333 + 0.005, 0, 0, 3)
+        btn.Text = name
+        btn.TextColor3 = (i == 1) and Colors.Text or Colors.TextDim
+        btn.TextSize = 12
+        btn.Font = Enum.Font.GothamBold
+        btn.ZIndex = 1001
+        ApplyCorner(btn, 6)
+        tabs[i] = btn
+    end
+    
+    -- КОНТЕЙНЕРЫ
+    local containers = {}
+    
+    for i = 1, 3 do
+        local frame = Instance.new("ScrollingFrame")
+        frame.Parent = MainFrame
+        frame.BackgroundTransparency = 1
+        frame.BorderSizePixel = 0
+        frame.Size = UDim2.new(1, 0, 1, -80)
+        frame.Position = UDim2.new(0, 0, 0, 80)
+        frame.CanvasSize = UDim2.new(0, 0, 0, 0)
+        frame.ScrollBarThickness = 4
+        frame.ScrollBarImageColor3 = Colors.Border
+        frame.ZIndex = 1000
+        frame.Visible = (i == 1)
+        
+        local container = Instance.new("Frame")
+        container.Parent = frame
+        container.BackgroundTransparency = 1
+        container.Size = UDim2.new(1, 0, 0, 0)
+        container.ZIndex = 1001
+        
+        containers[i] = {frame = frame, container = container}
+    end
+    
+    -- ФУНКЦИЯ СОЗДАНИЯ СЛАЙДЕРА
+    local function MakeSlider(parent, label, min, max, default, callback)
+        local frame = Instance.new("Frame")
+        frame.Parent = parent
+        frame.BackgroundColor3 = Colors.BG2
+        frame.BackgroundTransparency = 0.3
+        frame.BorderSizePixel = 1
+        frame.BorderColor3 = Colors.Border
+        frame.Size = UDim2.new(1, -20, 0, 65)
+        frame.Position = UDim2.new(0, 10, 0, 0)
+        frame.ZIndex = 1002
+        ApplyCorner(frame, 8)
+        
+        local labelText = Instance.new("TextLabel")
+        labelText.Parent = frame
+        labelText.BackgroundTransparency = 1
+        labelText.Size = UDim2.new(0.6, 0, 0, 24)
+        labelText.Position = UDim2.new(0, 12, 0, 6)
+        labelText.Text = label
+        labelText.TextColor3 = Colors.Text
+        labelText.TextSize = 14
+        labelText.TextXAlignment = Enum.TextXAlignment.Left
+        labelText.Font = Enum.Font.Gotham
+        labelText.ZIndex = 1003
+        
+        local valueText = Instance.new("TextLabel")
+        valueText.Parent = frame
+        valueText.BackgroundTransparency = 1
+        valueText.Size = UDim2.new(0.3, 0, 0, 24)
+        valueText.Position = UDim2.new(0.7, 0, 0, 6)
+        valueText.Text = tostring(default)
+        valueText.TextColor3 = Colors.Accent2
+        valueText.TextSize = 15
+        valueText.TextXAlignment = Enum.TextXAlignment.Right
+        valueText.Font = Enum.Font.GothamBold
+        valueText.ZIndex = 1003
+        
+        local bg = Instance.new("Frame")
+        bg.Parent = frame
+        bg.BackgroundColor3 = Colors.BG3
+        bg.BorderSizePixel = 0
+        bg.Size = UDim2.new(1, -24, 0, 8)
+        bg.Position = UDim2.new(0, 12, 0, 38)
+        bg.ZIndex = 1003
+        ApplyCorner(bg, 4)
+        
+        local fill = Instance.new("Frame")
+        fill.Parent = bg
+        fill.BackgroundColor3 = Colors.Accent2
+        fill.BorderSizePixel = 0
+        fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+        fill.ZIndex = 1004
+        ApplyCorner(fill, 4)
+        
+        local button = Instance.new("TextButton")
+        button.Parent = bg
+        button.BackgroundColor3 = Colors.Text
+        button.BorderSizePixel = 2
+        button.BorderColor3 = Colors.Accent
+        button.Size = UDim2.new(0, 18, 0, 18)
+        button.Position = UDim2.new((default - min) / (max - min), -9, 0.5, -9)
+        button.Text = ""
+        button.ZIndex = 1005
+        button.AutoButtonColor = false
+        ApplyCorner(button, 9)
+        
+        local dragging = false
+        local function UpdateSlider(mouseX)
+            local relX = math.clamp((mouseX - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
+            local value = min + (max - min) * relX
+            value = math.floor(value * 10 + 0.5) / 10
+            value = math.clamp(value, min, max)
+            fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
+            button.Position = UDim2.new((value - min) / (max - min), -9, 0.5, -9)
+            valueText.Text = tostring(value)
+            callback(value)
+        end
+        
+        button.MouseButton1Down:Connect(function() dragging = true end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                UpdateSlider(input.Position.X)
+            end
+        end)
+        
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+        
+        bg.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                UpdateSlider(input.Position.X)
+                dragging = true
+            end
+        end)
+        
+        return frame
+    end
+    
+    -- ФУНКЦИЯ СОЗДАНИЯ КНОПКИ
+    local function MakeButton(parent, text, callback, color)
+        local btn = Instance.new("TextButton")
+        btn.Parent = parent
+        btn.BackgroundColor3 = color or Colors.BG3
+        btn.BackgroundTransparency = 0.2
+        btn.BorderSizePixel = 1
+        btn.BorderColor3 = Colors.Border
+        btn.Size = UDim2.new(1, -20, 0, 40)
+        btn.Position = UDim2.new(0, 10, 0, 0)
+        btn.Text = text
+        btn.TextColor3 = Colors.Text
+        btn.TextSize = 14
+        btn.Font = Enum.Font.Gotham
+        btn.ZIndex = 1002
+        ApplyCorner(btn, 8)
+        btn.MouseButton1Click:Connect(callback)
+        return btn
+    end
+    
+    -- ФУНКЦИЯ СОЗДАНИЯ ВЫБОРА ЦВЕТА
+    local function CreateColorPicker(parent, label, defaultColor, callback, yPos)
+        local frame = Instance.new("Frame")
+        frame.Parent = parent
+        frame.BackgroundTransparency = 1
+        frame.Size = UDim2.new(1, -20, 0, 50)
+        frame.Position = UDim2.new(0, 10, 0, yPos or 0)
+        frame.ZIndex = 1002
+        
+        local labelText = Instance.new("TextLabel")
+        labelText.Parent = frame
+        labelText.BackgroundTransparency = 1
+        labelText.Size = UDim2.new(0.5, 0, 1, 0)
+        labelText.Text = label
+        labelText.TextColor3 = Colors.Text
+        labelText.TextSize = 14
+        labelText.TextXAlignment = Enum.TextXAlignment.Left
+        labelText.Font = Enum.Font.Gotham
+        labelText.ZIndex = 1003
+        
+        local colors = {
+            Color3.fromRGB(28, 28, 33),
+            Color3.fromRGB(40, 40, 80),
+            Color3.fromRGB(80, 40, 40),
+            Color3.fromRGB(40, 80, 40),
+            Color3.fromRGB(80, 80, 40),
+            Color3.fromRGB(40, 40, 40),
+            Color3.fromRGB(60, 60, 60),
+            Color3.fromRGB(20, 20, 50)
+        }
+        
+        for i, color in ipairs(colors) do
+            local btn = Instance.new("TextButton")
+            btn.Parent = frame
+            btn.BackgroundColor3 = color
+            btn.BorderSizePixel = 2
+            btn.BorderColor3 = (defaultColor == color) and Colors.Text or Colors.Border
+            btn.Size = UDim2.new(0.1, -2, 0, 30)
+            btn.Position = UDim2.new(0.5 + (i - 1) * 0.06, 0, 0.5, -15)
+            btn.Text = ""
+            btn.ZIndex = 1003
+            ApplyCorner(btn, 15)
+            
+            btn.MouseButton1Click:Connect(function()
+                callback(color)
+                for _, b in pairs(frame:GetChildren()) do
+                    if b:IsA("TextButton") then
+                        b.BorderColor3 = (b.BackgroundColor3 == color) and Colors.Text or Colors.Border
+                    end
+                end
+            end)
+        end
+        
+        return frame
+    end
+    
+    -- ОБНОВЛЕНИЕ СПИСКА ИГРОКОВ
+    local function UpdatePlayers()
+        local container = containers[1].container
+        for _, child in pairs(container:GetChildren()) do child:Destroy() end
+        
+        local y = 10
+        local players = {}
+        
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                local hum = player.Character:FindFirstChild("Humanoid")
+                if root and hum then
+                    table.insert(players, {
+                        Name = player.Name,
+                        Player = player,
+                        Dist = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) and (LocalPlayer.Character.HumanoidRootPart.Position - root.Position).Magnitude or 0,
+                        Health = hum.Health,
+                        MaxHealth = hum.MaxHealth,
+                        Team = GetPlayerTeam(player),
+                        TeamColor = GetTeamColor(player)
+                    })
+                end
+            end
+        end
+        
+        table.sort(players, function(a, b) return a.Dist < b.Dist end)
+        
+        if #players == 0 then
+            local empty = Instance.new("TextLabel")
+            empty.Parent = container
+            empty.BackgroundTransparency = 1
+            empty.Size = UDim2.new(1, -20, 0, 50)
+            empty.Position = UDim2.new(0, 10, 0, y)
+            empty.Text = "Нет игроков"
+            empty.TextColor3 = Colors.TextDim
+            empty.TextSize = 16
+            empty.Font = Enum.Font.Gotham
+            empty.ZIndex = 1002
+            y = y + 55
+        else
+            for i, data in ipairs(players) do
+                -- Кнопка игрока
+                local btn = Instance.new("TextButton")
+                btn.Parent = container
+                btn.BackgroundColor3 = (i % 2 == 0) and Colors.BG2 or Colors.BG3
+                btn.BackgroundTransparency = 0.3
+                btn.BorderSizePixel = 1
+                btn.BorderColor3 = data.TeamColor
+                btn.Size = UDim2.new(1, -20, 0, 70)
+                btn.Position = UDim2.new(0, 10, 0, y)
+                btn.Text = ""
+                btn.ZIndex = 1002
+                ApplyCorner(btn, 8)
+                
+                btn.MouseButton1Click:Connect(function()
+                    if data.Player and data.Player.Character then
+                        local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        local targetRoot = data.Player.Character:FindFirstChild("HumanoidRootPart")
+                        if localRoot and targetRoot then
+                            localRoot.CFrame = targetRoot.CFrame + Vector3.new(0, 3, 0)
+                        end
+                    end
+                end)
+                
+                -- Имя игрока
+                local nameLabel = Instance.new("TextLabel")
+                nameLabel.Parent = btn
+                nameLabel.BackgroundTransparency = 1
+                nameLabel.Size = UDim2.new(0.35, 0, 0, 20)
+                nameLabel.Position = UDim2.new(0, 10, 0, 5)
+                nameLabel.Text = data.Name
+                nameLabel.TextColor3 = Colors.Text
+                nameLabel.TextSize = 13
+                nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+                nameLabel.Font = Enum.Font.Gotham
+                nameLabel.ZIndex = 1003
+                
+                -- Команда игрока
+                local teamLabel = Instance.new("TextLabel")
+                teamLabel.Parent = btn
+                teamLabel.BackgroundTransparency = 1
+                teamLabel.Size = UDim2.new(0.3, 0, 0, 20)
+                teamLabel.Position = UDim2.new(0.35, 0, 0, 5)
+                teamLabel.Text = data.Team
+                teamLabel.TextColor3 = data.TeamColor
+                teamLabel.TextSize = 11
+                teamLabel.TextXAlignment = Enum.TextXAlignment.Left
+                teamLabel.Font = Enum.Font.GothamBold
+                teamLabel.ZIndex = 1003
+                
+                -- Дистанция
+                local distLabel = Instance.new("TextLabel")
+                distLabel.Parent = btn
+                distLabel.BackgroundTransparency = 1
+                distLabel.Size = UDim2.new(0.3, 0, 0, 20)
+                distLabel.Position = UDim2.new(0.65, 0, 0, 5)
+                distLabel.Text = string.format("%.0fm", data.Dist)
+                distLabel.TextColor3 = Colors.TextDim
+                distLabel.TextSize = 11
+                distLabel.TextXAlignment = Enum.TextXAlignment.Right
+                distLabel.Font = Enum.Font.Gotham
+                distLabel.ZIndex = 1003
+                
+                -- Полоска здоровья
+                local hpBg = Instance.new("Frame")
+                hpBg.Parent = btn
+                hpBg.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                hpBg.BorderSizePixel = 1
+                hpBg.BorderColor3 = Colors.Border
+                hpBg.Size = UDim2.new(0.6, 0, 0, 8)
+                hpBg.Position = UDim2.new(0.2, 0, 0, 35)
+                hpBg.ZIndex = 1003
+                ApplyCorner(hpBg, 4)
+                
+                local hpPercent = math.clamp(data.Health / data.MaxHealth, 0, 1)
+                local hpFill = Instance.new("Frame")
+                hpFill.Parent = hpBg
+                hpFill.BackgroundColor3 = hpPercent > 0.5 and Colors.Green or hpPercent > 0.25 and Colors.Yellow or Colors.Red
+                hpFill.BorderSizePixel = 0
+                hpFill.Size = UDim2.new(hpPercent, 0, 1, 0)
+                hpFill.ZIndex = 1004
+                ApplyCorner(hpFill, 4)
+                
+                -- Текст здоровья
+                local hpText = Instance.new("TextLabel")
+                hpText.Parent = btn
+                hpText.BackgroundTransparency = 1
+                hpText.Size = UDim2.new(0.3, 0, 0, 20)
+                hpText.Position = UDim2.new(0.65, 0, 0, 30)
+                hpText.Text = string.format("%.0f/%.0f", data.Health, data.MaxHealth)
+                hpText.TextColor3 = Colors.TextDim
+                hpText.TextSize = 10
+                hpText.TextXAlignment = Enum.TextXAlignment.Right
+                hpText.Font = Enum.Font.Gotham
+                hpText.ZIndex = 1003
+                
+                y = y + 75
+            end
+        end
+        
+        containers[1].frame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+        container.Size = UDim2.new(1, 0, 0, y + 10)
+    end
+    
+    -- UI ИГРОКА
+    local function CreatePlayerUI()
+        local container = containers[2].container
+        for _, child in pairs(container:GetChildren()) do child:Destroy() end
+        
+        local y = 10
+        
+        -- Заголовок полета
+        local flyTitle = Instance.new("TextLabel")
+        flyTitle.Parent = container
+        flyTitle.BackgroundTransparency = 1
+        flyTitle.Size = UDim2.new(1, -20, 0, 25)
+        flyTitle.Position = UDim2.new(0, 10, 0, y)
+        flyTitle.Text = "ПОЛЕТ"
+        flyTitle.TextColor3 = Colors.Accent2
+        flyTitle.TextSize = 16
+        flyTitle.Font = Enum.Font.GothamBold
+        flyTitle.ZIndex = 1002
+        y = y + 30
+        
+        local flyButton = MakeButton(container, FlyEnabled and "Выключить полет" or "Включить полет", function()
+            if FlyEnabled then StopFly() else StartFly() end
+            CreatePlayerUI()
+        end, FlyEnabled and Colors.Red or Colors.Green)
+        flyButton.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        local flySlider = MakeSlider(container, "Скорость полета", 10, 200, FlySpeed, function(val)
+            FlySpeed = val
+        end)
+        flySlider.Position = UDim2.new(0, 0, 0, y)
+        y = y + 70
+        
+        local modeLabel = Instance.new("TextLabel")
+        modeLabel.Parent = container
+        modeLabel.BackgroundTransparency = 1
+        modeLabel.Size = UDim2.new(1, -20, 0, 25)
+        modeLabel.Position = UDim2.new(0, 10, 0, y)
+        modeLabel.Text = "Режим: " .. FlyMode
+        modeLabel.TextColor3 = Colors.Accent2
+        modeLabel.TextSize = 14
+        modeLabel.Font = Enum.Font.Gotham
+        modeLabel.ZIndex = 1002
+        y = y + 30
+        
+        local modes = {"Свободный", "По курсору", "По взгляду"}
+        for i, mode in ipairs(modes) do
+            local btn = Instance.new("TextButton")
+            btn.Parent = container
+            btn.BackgroundColor3 = (FlyMode == mode) and Colors.Accent or Colors.BG3
+            btn.BackgroundTransparency = (FlyMode == mode) and 0.1 or 0.2
+            btn.BorderSizePixel = 1
+            btn.BorderColor3 = Colors.Border
+            btn.Size = UDim2.new(0.3, -8, 0, 32)
+            btn.Position = UDim2.new((i - 1) * 0.333 + 0.015, 0, 0, y)
+            btn.Text = mode
+            btn.TextColor3 = (FlyMode == mode) and Colors.Text or Colors.TextDim
+            btn.TextSize = 12
+            btn.Font = Enum.Font.Gotham
+            btn.ZIndex = 1002
+            ApplyCorner(btn, 6)
+            btn.MouseButton1Click:Connect(function()
+                FlyMode = mode
+                CreatePlayerUI()
+            end)
+        end
+        y = y + 42
+        
+        -- Разделитель
+        local separator = Instance.new("Frame")
+        separator.Parent = container
+        separator.BackgroundColor3 = Colors.Border
+        separator.BorderSizePixel = 0
+        separator.Size = UDim2.new(1, -20, 0, 1)
+        separator.Position = UDim2.new(0, 10, 0, y)
+        separator.ZIndex = 1002
+        y = y + 15
+        
+        -- Характеристики
+        local charTitle = Instance.new("TextLabel")
+        charTitle.Parent = container
+        charTitle.BackgroundTransparency = 1
+        charTitle.Size = UDim2.new(1, -20, 0, 25)
+        charTitle.Position = UDim2.new(0, 10, 0, y)
+        charTitle.Text = "ХАРАКТЕРИСТИКИ"
+        charTitle.TextColor3 = Colors.Accent2
+        charTitle.TextSize = 16
+        charTitle.Font = Enum.Font.GothamBold
+        charTitle.ZIndex = 1002
+        y = y + 30
+        
+        local walkSlider = MakeSlider(container, "Скорость", 16, 100, WalkSpeed, function(val)
+            WalkSpeed = val
+            ApplyCharacteristics()
+        end)
+        walkSlider.Position = UDim2.new(0, 0, 0, y)
+        y = y + 70
+        
+        local jumpSlider = MakeSlider(container, "Прыжок", 50, 200, JumpPower, function(val)
+            JumpPower = val
+            ApplyCharacteristics()
+        end)
+        jumpSlider.Position = UDim2.new(0, 0, 0, y)
+        y = y + 70
+        
+        local gravitySlider = MakeSlider(container, "Гравитация", 0, 300, PlayerGravity, function(val)
+            PlayerGravity = val
+            if not FlyEnabled then
+                ApplyCharacteristics()
+            end
+        end)
+        gravitySlider.Position = UDim2.new(0, 0, 0, y)
+        y = y + 70
+        
+        containers[2].frame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+        container.Size = UDim2.new(1, 0, 0, y + 10)
+    end
+    
+    -- UI КАСТОМИЗАЦИИ
+    local function CreateCustomUI()
+        local container = containers[3].container
+        for _, child in pairs(container:GetChildren()) do child:Destroy() end
+        
+        local y = 10
+        
+        local title = Instance.new("TextLabel")
+        title.Parent = container
+        title.BackgroundTransparency = 1
+        title.Size = UDim2.new(1, -20, 0, 30)
+        title.Position = UDim2.new(0, 10, 0, y)
+        title.Text = "КАСТОМИЗАЦИЯ"
+        title.TextColor3 = Colors.Accent2
+        title.TextSize = 16
+        title.Font = Enum.Font.GothamBold
+        title.ZIndex = 1002
+        y = y + 35
+        
+        CreateColorPicker(container, "Цвет фона:", MenuColor, function(color)
+            MenuColor = color
+            MainFrame.BackgroundColor3 = color
+        end, y)
+        y = y + 55
+        
+        local transSlider = MakeSlider(container, "Прозрачность", 0, 0.5, MenuTransparency, function(val)
+            MenuTransparency = val
+            MainFrame.BackgroundTransparency = val
+        end)
+        transSlider.Position = UDim2.new(0, 0, 0, y)
+        y = y + 70
+        
+        CreateColorPicker(container, "Цвет акцента:", AccentColor, function(color)
+            AccentColor = color
+            Colors.Accent = color
+            Header.BackgroundColor3 = color
+        end, y)
+        y = y + 55
+        
+        -- Надписи об авторах
+        local credits = {
+            "Made by creator (babykity)",
+            "Telegram: @minexcfu",
+            "Discord: 777miroslav777",
+            "Helper (no) kakaroldod"
+        }
+        
+        for _, credit in ipairs(credits) do
+            local label = Instance.new("TextLabel")
+            label.Parent = container
+            label.BackgroundTransparency = 1
+            label.Size = UDim2.new(1, -20, 0, 20)
+            label.Position = UDim2.new(0, 10, 0, y)
+            label.Text = credit
+            label.TextColor3 = Colors.TextDim
+            label.TextSize = 12
+            label.Font = Enum.Font.Gotham
+            label.ZIndex = 1002
+            y = y + 25
+        end
+        
+        containers[3].frame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+        container.Size = UDim2.new(1, 0, 0, y + 10)
+    end
+    
+    -- Переключение табов
+    for i = 1, 3 do
+        tabs[i].MouseButton1Click:Connect(function()
+            for j = 1, 3 do
+                tabs[j].BackgroundColor3 = (j == i) and Colors.Accent or Colors.BG3
+                tabs[j].BackgroundTransparency = (j == i) and 0.1 or 0.2
+                tabs[j].TextColor3 = (j == i) and Colors.Text or Colors.TextDim
+                containers[j].frame.Visible = (j == i)
+            end
+            if i == 1 then UpdatePlayers()
+            elseif i == 2 then CreatePlayerUI()
+            elseif i == 3 then CreateCustomUI() end
+        end)
+    end
+    
+    -- Инициализация
+    UpdatePlayers()
+    CreatePlayerUI()
+    CreateCustomUI()
+end
+
+-- Запуск меню
+CreateMenu()
+print("XENO MENU успешно запущен!")
