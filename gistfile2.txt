@@ -1,4 +1,4 @@
--- XENO MENU - ТЕЛЕПОРТ + ИГРОК + КАСТОМИЗАЦИЯ + МЕТКИ
+-- XENO MENU - ТЕЛЕПОРТ + ИГРОК + ESP + МЕТКИ + КАСТОМИЗАЦИЯ
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
@@ -22,9 +22,134 @@ local PlayerGravity = 196.2
 local Marks = {}
 local SavedBackgroundID = nil
 local GalleryImages = {}
+local ESPColor = Color3.fromRGB(255, 0, 0)
+local ESPTeamColor = false
+local TracerEnabled = false
+local BoxEnabled = false
+local NametagsEnabled = false
+local SpinEnabled = false
+local SpinSpeed = 10
+local ESPDistance = 500
+local ESPRainbow = false
+local ESPRainbowConn = nil
 
 if _G.XenoMarks then Marks = _G.XenoMarks end
 if _G.XenoBackgroundID then SavedBackgroundID = _G.XenoBackgroundID end
+
+-- === ESP ===
+local ESPHighlights = {}
+local ESPBeams = {}
+local ESPConnection = nil
+
+local function ClearESP()
+    for _, obj in pairs(ESPHighlights) do
+        if obj then pcall(function() obj:Destroy() end) end
+    end
+    for _, beam in pairs(ESPBeams) do
+        if beam then pcall(function() beam:Destroy() end) end
+    end
+    ESPHighlights = {}
+    ESPBeams = {}
+end
+
+local function UpdateESP()
+    ClearESP()
+    if ESPConnection then ESPConnection:Disconnect() ESPConnection = nil end
+    if not TracerEnabled and not BoxEnabled and not NametagsEnabled then return end
+    
+    ESPConnection = RunService.RenderStepped:Connect(function()
+        ClearESP()
+        local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local localHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+        if not localRoot then return end
+        
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                local head = player.Character:FindFirstChild("Head")
+                if root then
+                    local distance = (localRoot.Position - root.Position).Magnitude
+                    if distance <= ESPDistance then
+                        local espColor
+                        if ESPTeamColor then
+                            if player.Team then espColor = player.Team.TeamColor.Color
+                            elseif player.TeamColor then espColor = player.TeamColor.Color
+                            else espColor = Color3.fromRGB(170, 170, 180) end
+                        else
+                            espColor = ESPColor
+                        end
+                        
+                        if TracerEnabled and localHead then
+                            local beam = Instance.new("Beam")
+                            beam.Parent = workspace
+                            local attach0 = Instance.new("Attachment")
+                            attach0.Parent = localHead
+                            local attach1 = Instance.new("Attachment")
+                            attach1.Parent = root
+                            beam.Attachment0 = attach0
+                            beam.Attachment1 = attach1
+                            beam.Color = ColorSequence.new(espColor)
+                            beam.Width0 = 0.2
+                            beam.Width1 = 0.2
+                            beam.Transparency = NumberSequence.new(0)
+                            beam.Enabled = true
+                            table.insert(ESPBeams, beam)
+                            table.insert(ESPBeams, attach0)
+                            table.insert(ESPBeams, attach1)
+                        end
+                        
+                        if BoxEnabled then
+                            local highlight = Instance.new("Highlight")
+                            highlight.Parent = player.Character
+                            highlight.FillColor = espColor
+                            highlight.OutlineColor = espColor
+                            highlight.FillTransparency = 0.7
+                            highlight.OutlineTransparency = 0
+                            highlight.Adornee = player.Character
+                            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                            table.insert(ESPHighlights, highlight)
+                        end
+                        
+                        if NametagsEnabled and head then
+                            local billboard = Instance.new("BillboardGui")
+                            billboard.Parent = head
+                            billboard.Size = UDim2.new(0, 200, 0, 40)
+                            billboard.StudsOffset = Vector3.new(0, 3, 0)
+                            billboard.AlwaysOnTop = true
+                            billboard.MaxDistance = ESPDistance
+                            billboard.Adornee = head
+                            local label = Instance.new("TextLabel")
+                            label.Parent = billboard
+                            label.Size = UDim2.new(1, 0, 1, 0)
+                            label.BackgroundColor3 = Color3.new(0, 0, 0)
+                            label.BackgroundTransparency = 0.3
+                            label.Text = player.Name
+                            label.TextColor3 = espColor
+                            label.Font = Enum.Font.GothamBold
+                            label.TextSize = 14
+                            label.TextStrokeTransparency = 0
+                            label.TextStrokeColor3 = Color3.new(0, 0, 0)
+                            table.insert(ESPHighlights, billboard)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function SetESPRainbow(enabled)
+    ESPRainbow = enabled
+    if ESPRainbowConn then ESPRainbowConn:Disconnect() ESPRainbowConn = nil end
+    if enabled then
+        ESPTeamColor = false
+        local hue = 0
+        ESPRainbowConn = RunService.RenderStepped:Connect(function(dt)
+            hue = (hue + dt * 0.5) % 1
+            ESPColor = HSVToColor(hue, 1, 1)
+        end)
+    end
+end
 
 -- === ФУНКЦИИ ПОЛЕТА ===
 local function StartFly()
@@ -109,6 +234,24 @@ local function ApplyCharacteristics()
         hum.JumpPower = JumpPower
     end
     workspace.Gravity = PlayerGravity
+end
+
+-- Крутилка
+local SpinConn = nil
+local function StartSpin()
+    if SpinConn then SpinConn:Disconnect() end
+    SpinConn = RunService.Heartbeat:Connect(function()
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(SpinSpeed), 0)
+        end
+    end)
+    SpinEnabled = true
+end
+
+local function StopSpin()
+    if SpinConn then SpinConn:Disconnect() SpinConn = nil end
+    SpinEnabled = false
 end
 
 local function GetPlayerTeam(player)
@@ -423,9 +566,7 @@ local function CreateMenu()
     end)
     
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
     end)
     
     local Title = Instance.new("TextLabel")
@@ -447,7 +588,7 @@ local function CreateMenu()
     CloseBtn.BorderSizePixel = 0
     CloseBtn.Size = UDim2.new(0, 28, 0, 28)
     CloseBtn.Position = UDim2.new(1, -36, 0, 6)
-    CloseBtn.Text = "X"
+    CloseBtn.Text = "✕"
     CloseBtn.TextColor3 = Colors.Text
     CloseBtn.TextSize = 16
     CloseBtn.Font = Enum.Font.GothamBold
@@ -455,6 +596,8 @@ local function CreateMenu()
     ApplyCorner(CloseBtn, 14)
     CloseBtn.MouseButton1Click:Connect(function()
         if FlyEnabled then StopFly() end
+        if SpinEnabled then StopSpin() end
+        ClearESP()
         ScreenGui:Destroy()
         _G.MenuGUI = nil
     end)
@@ -507,17 +650,9 @@ local function CreateMenu()
         resizeEdge = edge
     end
     
-    resizeHandle.MouseButton1Down:Connect(function()
-        StartResize("corner")
-    end)
-    
-    rightEdge.MouseButton1Down:Connect(function()
-        StartResize("right")
-    end)
-    
-    bottomEdge.MouseButton1Down:Connect(function()
-        StartResize("bottom")
-    end)
+    resizeHandle.MouseButton1Down:Connect(function() StartResize("corner") end)
+    rightEdge.MouseButton1Down:Connect(function() StartResize("right") end)
+    bottomEdge.MouseButton1Down:Connect(function() StartResize("bottom") end)
     
     UserInputService.InputChanged:Connect(function(input)
         if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -556,7 +691,7 @@ local function CreateMenu()
     TabContainer.ZIndex = 1000
     
     local tabs = {}
-    local tabNames = {"Телепорт", "Игрок", "Метки", "Кастомизация"}
+    local tabNames = {"Телепорт", "Игрок", "ESP", "Метки", "Кастомизация"}
     
     for i, name in ipairs(tabNames) do
         local btn = Instance.new("TextButton")
@@ -577,7 +712,7 @@ local function CreateMenu()
     
     local containers = {}
     
-    for i = 1, 4 do
+    for i = 1, 5 do
         local frame = Instance.new("ScrollingFrame")
         frame.Parent = MainFrame
         frame.BackgroundTransparency = 1
@@ -714,6 +849,73 @@ local function CreateMenu()
         return btn
     end
     
+    local function CreateAndroidToggle(parent, label, callback, default)
+        local frame = Instance.new("Frame")
+        frame.Parent = parent
+        frame.BackgroundColor3 = Colors.BG2
+        frame.BackgroundTransparency = 0.3
+        frame.BorderSizePixel = 1
+        frame.BorderColor3 = Colors.Border
+        frame.Size = UDim2.new(1, -20, 0, 40)
+        frame.Position = UDim2.new(0, 10, 0, 0)
+        frame.ZIndex = 1002
+        ApplyCorner(frame, 8)
+        
+        local labelText = Instance.new("TextLabel")
+        labelText.Parent = frame
+        labelText.BackgroundTransparency = 1
+        labelText.Size = UDim2.new(0.6, 0, 1, 0)
+        labelText.Position = UDim2.new(0, 10, 0, 0)
+        labelText.Text = label
+        labelText.TextColor3 = Colors.Text
+        labelText.TextSize = 14
+        labelText.TextXAlignment = Enum.TextXAlignment.Left
+        labelText.Font = Enum.Font.Gotham
+        labelText.ZIndex = 1003
+        
+        local switchBg = Instance.new("TextButton")
+        switchBg.Parent = frame
+        switchBg.BackgroundColor3 = default and Colors.Green or Colors.BG3
+        switchBg.BorderSizePixel = 0
+        switchBg.Size = UDim2.new(0, 50, 0, 25)
+        switchBg.Position = UDim2.new(1, -60, 0.5, -12)
+        switchBg.Text = ""
+        switchBg.ZIndex = 1003
+        switchBg.AutoButtonColor = false
+        ApplyCorner(switchBg, 12)
+        
+        local circle = Instance.new("Frame")
+        circle.Parent = switchBg
+        circle.BackgroundColor3 = Colors.Text
+        circle.BorderSizePixel = 0
+        circle.Size = UDim2.new(0, 21, 0, 21)
+        circle.Position = default and UDim2.new(1, -23, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
+        circle.ZIndex = 1004
+        ApplyCorner(circle, 10)
+        
+        local isOn = default
+        
+        switchBg.MouseButton1Click:Connect(function()
+            isOn = not isOn
+            if isOn then
+                TweenService:Create(circle, TweenInfo.new(0.2), {Position = UDim2.new(1, -23, 0.5, -10)}):Play()
+                TweenService:Create(switchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.Green}):Play()
+            else
+                TweenService:Create(circle, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -10)}):Play()
+                TweenService:Create(switchBg, TweenInfo.new(0.2), {BackgroundColor3 = Colors.BG3}):Play()
+            end
+            callback(isOn)
+        end)
+        
+        return {frame = frame, switchBg = switchBg, circle = circle}
+    end
+    
+    local function CreateRainbowToggle(parent, callback, default, yPos)
+        local toggle = CreateAndroidToggle(parent, "Радуга", callback, default)
+        toggle.frame.Position = UDim2.new(0, 10, 0, yPos or 0)
+        return toggle
+    end
+    
     local function UpdatePlayers()
         local container = containers[1].container
         for _, child in pairs(container:GetChildren()) do child:Destroy() end
@@ -806,7 +1008,7 @@ local function CreateMenu()
                 distLabel.BackgroundTransparency = 1
                 distLabel.Size = UDim2.new(0.3, 0, 0, 20)
                 distLabel.Position = UDim2.new(0.65, 0, 0, 5)
-                distLabel.Text = string.format("%.0fm", data.Dist)
+                distLabel.Text = string.format("%.0fм", data.Dist)
                 distLabel.TextColor3 = Colors.TextDim
                 distLabel.TextSize = 11
                 distLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -927,6 +1129,43 @@ local function CreateMenu()
         separator.ZIndex = 1002
         y = y + 15
         
+        local spinTitle = Instance.new("TextLabel")
+        spinTitle.Parent = container
+        spinTitle.BackgroundTransparency = 1
+        spinTitle.Size = UDim2.new(1, -20, 0, 25)
+        spinTitle.Position = UDim2.new(0, 10, 0, y)
+        spinTitle.Text = "КРУТИЛКА"
+        spinTitle.TextColor3 = Colors.Accent2
+        spinTitle.TextSize = 16
+        spinTitle.Font = Enum.Font.GothamBold
+        spinTitle.ZIndex = 1002
+        y = y + 30
+        
+        local spinToggle = CreateAndroidToggle(container, "Крутилка", function(enabled)
+            if enabled then StartSpin() else StopSpin() end
+        end, SpinEnabled)
+        spinToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        local spinSlider = MakeSlider(container, "Скорость кручения", 1, 50, SpinSpeed, function(val)
+            SpinSpeed = val
+            if SpinEnabled then
+                StopSpin()
+                StartSpin()
+            end
+        end)
+        spinSlider.Position = UDim2.new(0, 0, 0, y)
+        y = y + 70
+        
+        local separator2 = Instance.new("Frame")
+        separator2.Parent = container
+        separator2.BackgroundColor3 = Colors.Border
+        separator2.BorderSizePixel = 0
+        separator2.Size = UDim2.new(1, -20, 0, 1)
+        separator2.Position = UDim2.new(0, 10, 0, y)
+        separator2.ZIndex = 1002
+        y = y + 15
+        
         local charTitle = Instance.new("TextLabel")
         charTitle.Parent = container
         charTitle.BackgroundTransparency = 1
@@ -939,14 +1178,14 @@ local function CreateMenu()
         charTitle.ZIndex = 1002
         y = y + 30
         
-        local walkSlider = MakeSlider(container, "Скорость", 16, 100, WalkSpeed, function(val)
+        local walkSlider = MakeSlider(container, "Скорость ходьбы", 16, 100, WalkSpeed, function(val)
             WalkSpeed = val
             ApplyCharacteristics()
         end)
         walkSlider.Position = UDim2.new(0, 0, 0, y)
         y = y + 70
         
-        local jumpSlider = MakeSlider(container, "Прыжок", 50, 200, JumpPower, function(val)
+        local jumpSlider = MakeSlider(container, "Сила прыжка", 50, 200, JumpPower, function(val)
             JumpPower = val
             ApplyCharacteristics()
         end)
@@ -964,8 +1203,78 @@ local function CreateMenu()
         container.Size = UDim2.new(1, 0, 0, y + 10)
     end
     
-    local function CreateMarksUI()
+    local function CreateESPUI()
         local container = containers[3].container
+        for _, child in pairs(container:GetChildren()) do child:Destroy() end
+        
+        local y = 10
+        
+        local title = Instance.new("TextLabel")
+        title.Parent = container
+        title.BackgroundTransparency = 1
+        title.Size = UDim2.new(1, -20, 0, 25)
+        title.Position = UDim2.new(0, 10, 0, y)
+        title.Text = "ESP НАСТРОЙКИ"
+        title.TextColor3 = Colors.Accent2
+        title.TextSize = 16
+        title.Font = Enum.Font.GothamBold
+        title.ZIndex = 1002
+        y = y + 30
+        
+        local tracerToggle = CreateAndroidToggle(container, "Линии (Tracer)", function(enabled)
+            TracerEnabled = enabled
+            UpdateESP()
+        end, TracerEnabled)
+        tracerToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        local boxToggle = CreateAndroidToggle(container, "Подсветка (Box)", function(enabled)
+            BoxEnabled = enabled
+            UpdateESP()
+        end, BoxEnabled)
+        boxToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        local nametagsToggle = CreateAndroidToggle(container, "Имена (Nametags)", function(enabled)
+            NametagsEnabled = enabled
+            UpdateESP()
+        end, NametagsEnabled)
+        nametagsToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        local distanceSlider = MakeSlider(container, "Дальность ESP", 50, 2000, ESPDistance, function(val)
+            ESPDistance = val
+            UpdateESP()
+        end)
+        distanceSlider.Position = UDim2.new(0, 0, 0, y)
+        y = y + 70
+        
+        local teamColorToggle = CreateAndroidToggle(container, "Цвет команды", function(enabled)
+            ESPTeamColor = enabled
+            if enabled then SetESPRainbow(false) end
+            UpdateESP()
+        end, ESPTeamColor)
+        teamColorToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        local colorPalette = CreateColorPalette(container, "Цвет ESP:", ESPColor, function(color)
+            ESPColor = color
+            UpdateESP()
+        end, y)
+        y = y + 210
+        
+        local espRainbowToggle = CreateRainbowToggle(container, function(enabled)
+            SetESPRainbow(enabled)
+        end, ESPRainbow)
+        espRainbowToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        containers[3].frame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+        container.Size = UDim2.new(1, 0, 0, y + 10)
+    end
+    
+    local function CreateMarksUI()
+        local container = containers[4].container
         for _, child in pairs(container:GetChildren()) do child:Destroy() end
         
         local y = 10
@@ -1039,7 +1348,7 @@ local function CreateMenu()
                 tpBtn.BorderColor3 = Colors.Border
                 tpBtn.Size = UDim2.new(0.2, 0, 0, 30)
                 tpBtn.Position = UDim2.new(0.75, 0, 0, 15)
-                tpBtn.Text = "TP"
+                tpBtn.Text = "ТП"
                 tpBtn.TextColor3 = Colors.Text
                 tpBtn.TextSize = 12
                 tpBtn.Font = Enum.Font.GothamBold
@@ -1060,7 +1369,7 @@ local function CreateMenu()
                 delBtn.BorderColor3 = Colors.Border
                 delBtn.Size = UDim2.new(0.1, 0, 0, 30)
                 delBtn.Position = UDim2.new(0.88, 0, 0, 15)
-                delBtn.Text = "X"
+                delBtn.Text = "✕"
                 delBtn.TextColor3 = Colors.Text
                 delBtn.TextSize = 12
                 delBtn.Font = Enum.Font.GothamBold
@@ -1076,12 +1385,12 @@ local function CreateMenu()
             end
         end
         
-        containers[3].frame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+        containers[4].frame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
         container.Size = UDim2.new(1, 0, 0, y + 10)
     end
     
     local function CreateCustomUI()
-        local container = containers[4].container
+        local container = containers[5].container
         for _, child in pairs(container:GetChildren()) do child:Destroy() end
         
         local y = 10
@@ -1104,12 +1413,47 @@ local function CreateMenu()
         end, y)
         y = y + 210
         
+        local bgRainbow = false
+        local bgRainbowConn = nil
+        local bgRainbowToggle = CreateRainbowToggle(container, function(enabled)
+            bgRainbow = enabled
+            if bgRainbowConn then bgRainbowConn:Disconnect() bgRainbowConn = nil end
+            if enabled then
+                local hue = 0
+                bgRainbowConn = RunService.RenderStepped:Connect(function(dt)
+                    hue = (hue + dt * 0.3) % 1
+                    MenuColor = HSVToColor(hue, 1, 1)
+                    MainFrame.BackgroundColor3 = MenuColor
+                end)
+            end
+        end, false)
+        bgRainbowToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
         local accentPalette = CreateColorPalette(container, "Цвет акцента:", AccentColor, function(color)
             AccentColor = color
             Colors.Accent = color
             Header.BackgroundColor3 = color
         end, y)
         y = y + 210
+        
+        local accentRainbow = false
+        local accentRainbowConn = nil
+        local accentRainbowToggle = CreateRainbowToggle(container, function(enabled)
+            accentRainbow = enabled
+            if accentRainbowConn then accentRainbowConn:Disconnect() accentRainbowConn = nil end
+            if enabled then
+                local hue = 0
+                accentRainbowConn = RunService.RenderStepped:Connect(function(dt)
+                    hue = (hue + dt * 0.3) % 1
+                    AccentColor = HSVToColor(hue, 1, 1)
+                    Colors.Accent = AccentColor
+                    Header.BackgroundColor3 = AccentColor
+                end)
+            end
+        end, false)
+        accentRainbowToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
         
         local transSlider = MakeSlider(container, "Прозрачность", 0, 0.5, MenuTransparency, function(val)
             MenuTransparency = val
@@ -1118,16 +1462,12 @@ local function CreateMenu()
         transSlider.Position = UDim2.new(0, 0, 0, y)
         y = y + 70
         
-        -- Кнопка обновления галереи (исправленная генерация через Random.new)
         local refreshBtn = MakeButton(container, "Обновить галерею", function()
             GalleryImages = {}
             local rng = Random.new()
             for i = 1, 30 do
                 local id = rng:NextInteger(1000000, 99999999)
-                table.insert(GalleryImages, {
-                    Name = "IMG #" .. id,
-                    ID = "rbxassetid://" .. id
-                })
+                table.insert(GalleryImages, {Name = "Картинка #" .. id, ID = "rbxassetid://" .. id})
             end
             CreateCustomUI()
         end, Colors.Green)
@@ -1150,10 +1490,7 @@ local function CreateMenu()
             local rng = Random.new()
             for i = 1, 30 do
                 local id = rng:NextInteger(1000000, 99999999)
-                table.insert(GalleryImages, {
-                    Name = "IMG #" .. id,
-                    ID = "rbxassetid://" .. id
-                })
+                table.insert(GalleryImages, {Name = "Картинка #" .. id, ID = "rbxassetid://" .. id})
             end
         end
         
@@ -1202,9 +1539,7 @@ local function CreateMenu()
             
             imgButton.MouseButton1Click:Connect(function()
                 for _, child in pairs(MainFrame:GetChildren()) do
-                    if child:IsA("ImageLabel") then
-                        child:Destroy()
-                    end
+                    if child:IsA("ImageLabel") then child:Destroy() end
                 end
                 local image = Instance.new("ImageLabel")
                 image.Parent = MainFrame
@@ -1226,19 +1561,17 @@ local function CreateMenu()
             SavedBackgroundID = nil
             _G.XenoBackgroundID = nil
             for _, child in pairs(MainFrame:GetChildren()) do
-                if child:IsA("ImageLabel") then
-                    child:Destroy()
-                end
+                if child:IsA("ImageLabel") then child:Destroy() end
             end
         end, Colors.Red)
         removeBtn.Position = UDim2.new(0, 10, 0, pagesY)
         pagesY = pagesY + 50
         
         local credits = {
-            "Made by creator (babykity)",
-            "Telegram: @minexcfu",
-            "Discord: 777miroslav777",
-            "Helper (no) kakaroldod"
+            "Создатель: babykity",
+            "Телеграм: @minexcfu",
+            "Дискорд: 777miroslav777",
+            "Помощник: kakaroldod"
         }
         
         local creditY = pagesY
@@ -1256,12 +1589,12 @@ local function CreateMenu()
             creditY = creditY + 25
         end
         
-        containers[4].frame.CanvasSize = UDim2.new(0, 0, 0, creditY + 50)
+        containers[5].frame.CanvasSize = UDim2.new(0, 0, 0, creditY + 50)
         container.Size = UDim2.new(1, 0, 0, creditY + 50)
     end
     
     local function SwitchTab(tabIndex)
-        for j = 1, 4 do
+        for j = 1, 5 do
             local isActive = (j == tabIndex)
             local targetColor = isActive and Colors.Accent or Colors.BG3
             local targetTransparency = isActive and 0.1 or 0.2
@@ -1283,11 +1616,12 @@ local function CreateMenu()
         end
         if tabIndex == 1 then UpdatePlayers()
         elseif tabIndex == 2 then CreatePlayerUI()
-        elseif tabIndex == 3 then CreateMarksUI()
-        elseif tabIndex == 4 then CreateCustomUI() end
+        elseif tabIndex == 3 then CreateESPUI()
+        elseif tabIndex == 4 then CreateMarksUI()
+        elseif tabIndex == 5 then CreateCustomUI() end
     end
     
-    for i = 1, 4 do
+    for i = 1, 5 do
         tabs[i].MouseButton1Click:Connect(function()
             SwitchTab(i)
         end)
@@ -1302,6 +1636,7 @@ local function CreateMenu()
     
     UpdatePlayers()
     CreatePlayerUI()
+    CreateESPUI()
     CreateMarksUI()
     CreateCustomUI()
 end
