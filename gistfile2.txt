@@ -5,36 +5,65 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
--- === ПЕРЕМЕННЫЕ ===
-local FlySpeed = 50
+-- === ПЕРЕМЕННЫЕ С ЗАГРУЗКОЙ ИЗ _G ===
+local FlySpeed = _G.XenoFlySpeed or 50
 local FlyEnabled = false
-local FlyMode = "Свободный"
+local FlyMode = _G.XenoFlyMode or "Свободный"
 local FlyBV = nil
 local FlyBG = nil
 local FlyConn = nil
-local MenuColor = Color3.fromRGB(28, 28, 33)
-local MenuTransparency = 0.05
-local AccentColor = Color3.fromRGB(100, 100, 130)
+local MenuColor = _G.XenoMenuColor or Color3.fromRGB(28, 28, 33)
+local MenuTransparency = _G.XenoMenuTransparency or 0.05
+local AccentColor = _G.XenoAccentColor or Color3.fromRGB(100, 100, 130)
 local Gravity = 196.2
-local WalkSpeed = 16
-local JumpPower = 50
-local PlayerGravity = 196.2
-local Marks = {}
-local SavedBackgroundID = nil
+local WalkSpeed = _G.XenoWalkSpeed or 16
+local JumpPower = _G.XenoJumpPower or 50
+local PlayerGravity = _G.XenoPlayerGravity or 196.2
+local Marks = _G.XenoMarks or {}
+local SavedBackgroundID = _G.XenoBackgroundID or nil
 local GalleryImages = {}
-local ESPColor = Color3.fromRGB(255, 0, 0)
-local ESPTeamColor = false
-local TracerEnabled = false
-local BoxEnabled = false
-local NametagsEnabled = false
-local SpinEnabled = false
-local SpinSpeed = 10
-local ESPDistance = 500
-local ESPRainbow = false
+local ESPColor = _G.XenoESPColor or Color3.fromRGB(255, 0, 0)
+local ESPTeamColor = _G.XenoESPTeamColor or false
+local TracerEnabled = _G.XenoTracerEnabled or false
+local BoxEnabled = _G.XenoBoxEnabled or false
+local NametagsEnabled = _G.XenoNametagsEnabled or false
+local SpinEnabled = _G.XenoSpinEnabled or false
+local SpinSpeed = _G.XenoSpinSpeed or 10
+local ESPDistance = _G.XenoESPDistance or 500
+local ESPRainbow = _G.XenoESPRainbow or false
 local ESPRainbowConn = nil
+local NoClipEnabled = _G.XenoNoClipEnabled or false
+local NoClipConn = nil
+local BGRainbow = _G.XenoBGRainbow or false
+local BGRainbowConn = nil
+local AccentRainbow = _G.XenoAccentRainbow or false
+local AccentRainbowConn = nil
 
-if _G.XenoMarks then Marks = _G.XenoMarks end
-if _G.XenoBackgroundID then SavedBackgroundID = _G.XenoBackgroundID end
+-- === ФУНКЦИЯ СОХРАНЕНИЯ ===
+local function SaveSettings()
+    _G.XenoFlySpeed = FlySpeed
+    _G.XenoFlyMode = FlyMode
+    _G.XenoMenuColor = MenuColor
+    _G.XenoMenuTransparency = MenuTransparency
+    _G.XenoAccentColor = AccentColor
+    _G.XenoWalkSpeed = WalkSpeed
+    _G.XenoJumpPower = JumpPower
+    _G.XenoPlayerGravity = PlayerGravity
+    _G.XenoMarks = Marks
+    _G.XenoBackgroundID = SavedBackgroundID
+    _G.XenoESPColor = ESPColor
+    _G.XenoESPTeamColor = ESPTeamColor
+    _G.XenoTracerEnabled = TracerEnabled
+    _G.XenoBoxEnabled = BoxEnabled
+    _G.XenoNametagsEnabled = NametagsEnabled
+    _G.XenoSpinEnabled = SpinEnabled
+    _G.XenoSpinSpeed = SpinSpeed
+    _G.XenoESPDistance = ESPDistance
+    _G.XenoESPRainbow = ESPRainbow
+    _G.XenoNoClipEnabled = NoClipEnabled
+    _G.XenoBGRainbow = BGRainbow
+    _G.XenoAccentRainbow = AccentRainbow
+end
 
 -- === ESP ===
 local ESPHighlights = {}
@@ -140,13 +169,16 @@ end
 
 local function SetESPRainbow(enabled)
     ESPRainbow = enabled
+    _G.XenoESPRainbow = enabled
     if ESPRainbowConn then ESPRainbowConn:Disconnect() ESPRainbowConn = nil end
     if enabled then
         ESPTeamColor = false
+        _G.XenoESPTeamColor = false
         local hue = 0
         ESPRainbowConn = RunService.RenderStepped:Connect(function(dt)
             hue = (hue + dt * 0.5) % 1
             ESPColor = HSVToColor(hue, 1, 1)
+            _G.XenoESPColor = ESPColor
         end)
     end
 end
@@ -234,6 +266,7 @@ local function ApplyCharacteristics()
         hum.JumpPower = JumpPower
     end
     workspace.Gravity = PlayerGravity
+    SaveSettings()
 end
 
 -- Крутилка
@@ -247,11 +280,42 @@ local function StartSpin()
         end
     end)
     SpinEnabled = true
+    _G.XenoSpinEnabled = true
 end
 
 local function StopSpin()
     if SpinConn then SpinConn:Disconnect() SpinConn = nil end
     SpinEnabled = false
+    _G.XenoSpinEnabled = false
+end
+
+-- NoClip
+local function StartNoClip()
+    if NoClipConn then NoClipConn:Disconnect() end
+    NoClipConn = RunService.Stepped:Connect(function()
+        if NoClipEnabled and LocalPlayer.Character then
+            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end)
+    NoClipEnabled = true
+    _G.XenoNoClipEnabled = true
+end
+
+local function StopNoClip()
+    if NoClipConn then NoClipConn:Disconnect() NoClipConn = nil end
+    NoClipEnabled = false
+    _G.XenoNoClipEnabled = false
+    if LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
 end
 
 local function GetPlayerTeam(player)
@@ -595,90 +659,13 @@ local function CreateMenu()
     CloseBtn.ZIndex = 1001
     ApplyCorner(CloseBtn, 14)
     CloseBtn.MouseButton1Click:Connect(function()
+        SaveSettings()
         if FlyEnabled then StopFly() end
         if SpinEnabled then StopSpin() end
+        if NoClipEnabled then StopNoClip() end
         ClearESP()
         ScreenGui:Destroy()
         _G.MenuGUI = nil
-    end)
-    
-    -- Изменение размера окна
-    local resizing = false
-    local resizeEdge = nil
-    local minWidth = 300
-    local maxWidth = 800
-    local minHeight = 400
-    local maxHeight = 700
-    
-    local resizeHandle = Instance.new("TextButton")
-    resizeHandle.Parent = MainFrame
-    resizeHandle.BackgroundColor3 = Colors.Accent
-    resizeHandle.BackgroundTransparency = 0.5
-    resizeHandle.BorderSizePixel = 0
-    resizeHandle.Size = UDim2.new(0, 20, 0, 20)
-    resizeHandle.Position = UDim2.new(1, -20, 1, -20)
-    resizeHandle.Text = "◢"
-    resizeHandle.TextColor3 = Colors.Text
-    resizeHandle.TextSize = 12
-    resizeHandle.Font = Enum.Font.GothamBold
-    resizeHandle.ZIndex = 1002
-    resizeHandle.AutoButtonColor = false
-    ApplyCorner(resizeHandle, 4)
-    
-    local rightEdge = Instance.new("TextButton")
-    rightEdge.Parent = MainFrame
-    rightEdge.BackgroundTransparency = 1
-    rightEdge.BorderSizePixel = 0
-    rightEdge.Size = UDim2.new(0, 5, 1, -20)
-    rightEdge.Position = UDim2.new(1, -5, 0, 0)
-    rightEdge.Text = ""
-    rightEdge.ZIndex = 1001
-    rightEdge.AutoButtonColor = false
-    
-    local bottomEdge = Instance.new("TextButton")
-    bottomEdge.Parent = MainFrame
-    bottomEdge.BackgroundTransparency = 1
-    bottomEdge.BorderSizePixel = 0
-    bottomEdge.Size = UDim2.new(1, -20, 0, 5)
-    bottomEdge.Position = UDim2.new(0, 0, 1, -5)
-    bottomEdge.Text = ""
-    bottomEdge.ZIndex = 1001
-    bottomEdge.AutoButtonColor = false
-    
-    local function StartResize(edge)
-        resizing = true
-        resizeEdge = edge
-    end
-    
-    resizeHandle.MouseButton1Down:Connect(function() StartResize("corner") end)
-    rightEdge.MouseButton1Down:Connect(function() StartResize("right") end)
-    bottomEdge.MouseButton1Down:Connect(function() StartResize("bottom") end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local mousePos = UserInputService:GetMouseLocation()
-            local framePos = MainFrame.AbsolutePosition
-            local frameSize = MainFrame.AbsoluteSize
-            
-            if resizeEdge == "corner" or resizeEdge == "right" then
-                local newWidth = mousePos.X - framePos.X
-                newWidth = math.clamp(newWidth, minWidth, maxWidth)
-                MainFrame.Size = UDim2.new(0, newWidth, 0, frameSize.Y)
-            end
-            
-            if resizeEdge == "corner" or resizeEdge == "bottom" then
-                local newHeight = mousePos.Y - framePos.Y
-                newHeight = math.clamp(newHeight, minHeight, maxHeight)
-                MainFrame.Size = UDim2.new(0, MainFrame.AbsoluteSize.X, 0, newHeight)
-            end
-        end
-    end)
-    
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            resizing = false
-            resizeEdge = nil
-        end
     end)
     
     local TabContainer = Instance.new("Frame")
@@ -1081,6 +1068,7 @@ local function CreateMenu()
         
         local flySlider = MakeSlider(container, "Скорость полета", 10, 200, FlySpeed, function(val)
             FlySpeed = val
+            _G.XenoFlySpeed = val
         end)
         flySlider.Position = UDim2.new(0, 0, 0, y)
         y = y + 70
@@ -1115,6 +1103,7 @@ local function CreateMenu()
             ApplyCorner(btn, 6)
             btn.MouseButton1Click:Connect(function()
                 FlyMode = mode
+                _G.XenoFlyMode = mode
                 CreatePlayerUI()
             end)
         end
@@ -1149,10 +1138,8 @@ local function CreateMenu()
         
         local spinSlider = MakeSlider(container, "Скорость кручения", 1, 50, SpinSpeed, function(val)
             SpinSpeed = val
-            if SpinEnabled then
-                StopSpin()
-                StartSpin()
-            end
+            _G.XenoSpinSpeed = val
+            if SpinEnabled then StopSpin(); StartSpin() end
         end)
         spinSlider.Position = UDim2.new(0, 0, 0, y)
         y = y + 70
@@ -1164,6 +1151,33 @@ local function CreateMenu()
         separator2.Size = UDim2.new(1, -20, 0, 1)
         separator2.Position = UDim2.new(0, 10, 0, y)
         separator2.ZIndex = 1002
+        y = y + 15
+        
+        local noClipTitle = Instance.new("TextLabel")
+        noClipTitle.Parent = container
+        noClipTitle.BackgroundTransparency = 1
+        noClipTitle.Size = UDim2.new(1, -20, 0, 25)
+        noClipTitle.Position = UDim2.new(0, 10, 0, y)
+        noClipTitle.Text = "ПРОХОЖДЕНИЕ СКВОЗЬ СТЕНЫ"
+        noClipTitle.TextColor3 = Colors.Accent2
+        noClipTitle.TextSize = 16
+        noClipTitle.Font = Enum.Font.GothamBold
+        noClipTitle.ZIndex = 1002
+        y = y + 30
+        
+        local noClipToggle = CreateAndroidToggle(container, "NoClip", function(enabled)
+            if enabled then StartNoClip() else StopNoClip() end
+        end, NoClipEnabled)
+        noClipToggle.frame.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        local separator3 = Instance.new("Frame")
+        separator3.Parent = container
+        separator3.BackgroundColor3 = Colors.Border
+        separator3.BorderSizePixel = 0
+        separator3.Size = UDim2.new(1, -20, 0, 1)
+        separator3.Position = UDim2.new(0, 10, 0, y)
+        separator3.ZIndex = 1002
         y = y + 15
         
         local charTitle = Instance.new("TextLabel")
@@ -1180,6 +1194,7 @@ local function CreateMenu()
         
         local walkSlider = MakeSlider(container, "Скорость ходьбы", 16, 100, WalkSpeed, function(val)
             WalkSpeed = val
+            _G.XenoWalkSpeed = val
             ApplyCharacteristics()
         end)
         walkSlider.Position = UDim2.new(0, 0, 0, y)
@@ -1187,6 +1202,7 @@ local function CreateMenu()
         
         local jumpSlider = MakeSlider(container, "Сила прыжка", 50, 200, JumpPower, function(val)
             JumpPower = val
+            _G.XenoJumpPower = val
             ApplyCharacteristics()
         end)
         jumpSlider.Position = UDim2.new(0, 0, 0, y)
@@ -1194,6 +1210,7 @@ local function CreateMenu()
         
         local gravitySlider = MakeSlider(container, "Гравитация", 0, 300, PlayerGravity, function(val)
             PlayerGravity = val
+            _G.XenoPlayerGravity = val
             if not FlyEnabled then ApplyCharacteristics() end
         end)
         gravitySlider.Position = UDim2.new(0, 0, 0, y)
@@ -1223,6 +1240,7 @@ local function CreateMenu()
         
         local tracerToggle = CreateAndroidToggle(container, "Линии (Tracer)", function(enabled)
             TracerEnabled = enabled
+            _G.XenoTracerEnabled = enabled
             UpdateESP()
         end, TracerEnabled)
         tracerToggle.frame.Position = UDim2.new(0, 10, 0, y)
@@ -1230,6 +1248,7 @@ local function CreateMenu()
         
         local boxToggle = CreateAndroidToggle(container, "Подсветка (Box)", function(enabled)
             BoxEnabled = enabled
+            _G.XenoBoxEnabled = enabled
             UpdateESP()
         end, BoxEnabled)
         boxToggle.frame.Position = UDim2.new(0, 10, 0, y)
@@ -1237,6 +1256,7 @@ local function CreateMenu()
         
         local nametagsToggle = CreateAndroidToggle(container, "Имена (Nametags)", function(enabled)
             NametagsEnabled = enabled
+            _G.XenoNametagsEnabled = enabled
             UpdateESP()
         end, NametagsEnabled)
         nametagsToggle.frame.Position = UDim2.new(0, 10, 0, y)
@@ -1244,6 +1264,7 @@ local function CreateMenu()
         
         local distanceSlider = MakeSlider(container, "Дальность ESP", 50, 2000, ESPDistance, function(val)
             ESPDistance = val
+            _G.XenoESPDistance = val
             UpdateESP()
         end)
         distanceSlider.Position = UDim2.new(0, 0, 0, y)
@@ -1251,6 +1272,7 @@ local function CreateMenu()
         
         local teamColorToggle = CreateAndroidToggle(container, "Цвет команды", function(enabled)
             ESPTeamColor = enabled
+            _G.XenoESPTeamColor = enabled
             if enabled then SetESPRainbow(false) end
             UpdateESP()
         end, ESPTeamColor)
@@ -1259,6 +1281,7 @@ local function CreateMenu()
         
         local colorPalette = CreateColorPalette(container, "Цвет ESP:", ESPColor, function(color)
             ESPColor = color
+            _G.XenoESPColor = color
             UpdateESP()
         end, y)
         y = y + 210
@@ -1409,54 +1432,59 @@ local function CreateMenu()
         
         local bgPalette = CreateColorPalette(container, "Цвет фона:", MenuColor, function(color)
             MenuColor = color
+            _G.XenoMenuColor = color
             MainFrame.BackgroundColor3 = color
         end, y)
         y = y + 210
         
-        local bgRainbow = false
-        local bgRainbowConn = nil
+        -- Rainbow для фона (с сохранением)
         local bgRainbowToggle = CreateRainbowToggle(container, function(enabled)
-            bgRainbow = enabled
-            if bgRainbowConn then bgRainbowConn:Disconnect() bgRainbowConn = nil end
+            BGRainbow = enabled
+            _G.XenoBGRainbow = enabled
+            if BGRainbowConn then BGRainbowConn:Disconnect() BGRainbowConn = nil end
             if enabled then
                 local hue = 0
-                bgRainbowConn = RunService.RenderStepped:Connect(function(dt)
+                BGRainbowConn = RunService.RenderStepped:Connect(function(dt)
                     hue = (hue + dt * 0.3) % 1
                     MenuColor = HSVToColor(hue, 1, 1)
+                    _G.XenoMenuColor = MenuColor
                     MainFrame.BackgroundColor3 = MenuColor
                 end)
             end
-        end, false)
+        end, BGRainbow)
         bgRainbowToggle.frame.Position = UDim2.new(0, 10, 0, y)
         y = y + 50
         
         local accentPalette = CreateColorPalette(container, "Цвет акцента:", AccentColor, function(color)
             AccentColor = color
+            _G.XenoAccentColor = color
             Colors.Accent = color
             Header.BackgroundColor3 = color
         end, y)
         y = y + 210
         
-        local accentRainbow = false
-        local accentRainbowConn = nil
+        -- Rainbow для акцента (с сохранением)
         local accentRainbowToggle = CreateRainbowToggle(container, function(enabled)
-            accentRainbow = enabled
-            if accentRainbowConn then accentRainbowConn:Disconnect() accentRainbowConn = nil end
+            AccentRainbow = enabled
+            _G.XenoAccentRainbow = enabled
+            if AccentRainbowConn then AccentRainbowConn:Disconnect() AccentRainbowConn = nil end
             if enabled then
                 local hue = 0
-                accentRainbowConn = RunService.RenderStepped:Connect(function(dt)
+                AccentRainbowConn = RunService.RenderStepped:Connect(function(dt)
                     hue = (hue + dt * 0.3) % 1
                     AccentColor = HSVToColor(hue, 1, 1)
+                    _G.XenoAccentColor = AccentColor
                     Colors.Accent = AccentColor
                     Header.BackgroundColor3 = AccentColor
                 end)
             end
-        end, false)
+        end, AccentRainbow)
         accentRainbowToggle.frame.Position = UDim2.new(0, 10, 0, y)
         y = y + 50
         
         local transSlider = MakeSlider(container, "Прозрачность", 0, 0.5, MenuTransparency, function(val)
             MenuTransparency = val
+            _G.XenoMenuTransparency = val
             MainFrame.BackgroundTransparency = val
         end)
         transSlider.Position = UDim2.new(0, 0, 0, y)
