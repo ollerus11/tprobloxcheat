@@ -1,8 +1,9 @@
--- XENO MENU - ТЕЛЕПОРТ + ИГРОК + КАСТОМИЗАЦИЯ
+-- XENO MENU - ТЕЛЕПОРТ + ИГРОК + КАСТОМИЗАЦИЯ + МЕТКИ
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 -- === ПЕРЕМЕННЫЕ ===
 local FlySpeed = 50
@@ -18,6 +19,12 @@ local Gravity = 196.2
 local WalkSpeed = 16
 local JumpPower = 50
 local PlayerGravity = 196.2
+local Marks = {}
+local SavedBackgroundID = nil
+local GalleryImages = {}
+
+if _G.XenoMarks then Marks = _G.XenoMarks end
+if _G.XenoBackgroundID then SavedBackgroundID = _G.XenoBackgroundID end
 
 -- === ФУНКЦИИ ПОЛЕТА ===
 local function StartFly()
@@ -52,28 +59,14 @@ local function StartFly()
         local move = Vector3.new(0, 0, 0)
         local cam = workspace.CurrentCamera
         
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then 
-            move = move + cam.CFrame.LookVector * Vector3.new(1, 0, 1) 
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then 
-            move = move - cam.CFrame.LookVector * Vector3.new(1, 0, 1) 
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then 
-            move = move - cam.CFrame.RightVector 
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then 
-            move = move + cam.CFrame.RightVector 
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then 
-            move = move + Vector3.new(0, 1, 0) 
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then 
-            move = move - Vector3.new(0, 1, 0) 
-        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector * Vector3.new(1, 0, 1) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector * Vector3.new(1, 0, 1) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move = move - Vector3.new(0, 1, 0) end
         
-        if move.Magnitude > 0 then 
-            move = move.Unit * FlySpeed 
-        end
+        if move.Magnitude > 0 then move = move.Unit * FlySpeed end
         
         if FlyMode == "Свободный" then
             FlyBV.Velocity = move
@@ -107,7 +100,6 @@ local function StopFly()
     workspace.Gravity = PlayerGravity
 end
 
--- === ПРИМЕНЕНИЕ ХАРАКТЕРИСТИК ===
 local function ApplyCharacteristics()
     local char = LocalPlayer.Character
     if not char then return end
@@ -119,41 +111,245 @@ local function ApplyCharacteristics()
     workspace.Gravity = PlayerGravity
 end
 
--- === ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ КОМАНДЫ ===
 local function GetPlayerTeam(player)
-    if player.Team then
-        return player.Team.Name
-    elseif player.TeamColor and player.TeamColor ~= BrickColor.new("Medium stone grey") then
-        return tostring(player.TeamColor)
-    else
-        return "Нет команды"
-    end
+    if player.Team then return player.Team.Name
+    elseif player.TeamColor and player.TeamColor ~= BrickColor.new("Medium stone grey") then return tostring(player.TeamColor)
+    else return "Нет команды" end
 end
 
--- === ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ ЦВЕТА КОМАНДЫ ===
 local function GetTeamColor(player)
-    if player.Team then
-        return player.Team.TeamColor.Color
-    elseif player.TeamColor then
-        return player.TeamColor.Color
-    else
-        return Color3.fromRGB(170, 170, 180)
-    end
+    if player.Team then return player.Team.TeamColor.Color
+    elseif player.TeamColor then return player.TeamColor.Color
+    else return Color3.fromRGB(170, 170, 180) end
 end
 
--- === ФУНКЦИЯ ДЛЯ СКРУГЛЕНИЯ ===
 local function ApplyCorner(element, radius)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, radius or 8)
     corner.Parent = element
 end
 
+local function HSVToColor(h, s, v)
+    local r, g, b
+    local i = math.floor(h * 6)
+    local f = h * 6 - i
+    local p = v * (1 - s)
+    local q = v * (1 - f * s)
+    local t = v * (1 - (1 - f) * s)
+    i = i % 6
+    if i == 0 then r, g, b = v, t, p
+    elseif i == 1 then r, g, b = q, v, p
+    elseif i == 2 then r, g, b = p, v, t
+    elseif i == 3 then r, g, b = p, q, v
+    elseif i == 4 then r, g, b = t, p, v
+    else r, g, b = v, p, q end
+    return Color3.new(r, g, b)
+end
+
+local function ColorToHSV(color)
+    local r, g, b = color.R, color.G, color.B
+    local max = math.max(r, g, b)
+    local min = math.min(r, g, b)
+    local h, s, v = 0, 0, max
+    local d = max - min
+    if max == 0 then s = 0 else s = d / max end
+    if max == min then h = 0
+    elseif max == r then h = (g - b) / d + (g < b and 6 or 0)
+    elseif max == g then h = (b - r) / d + 2
+    else h = (r - g) / d + 4 end
+    h = h / 6
+    return h, s, v
+end
+
+local function CreateColorPalette(parent, label, defaultColor, callback, yPos)
+    local frame = Instance.new("Frame")
+    frame.Parent = parent
+    frame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    frame.BackgroundTransparency = 0.3
+    frame.BorderSizePixel = 1
+    frame.BorderColor3 = Color3.fromRGB(70, 70, 80)
+    frame.Size = UDim2.new(1, -20, 0, 200)
+    frame.Position = UDim2.new(0, 10, 0, yPos or 0)
+    frame.ZIndex = 1002
+    ApplyCorner(frame, 8)
+    
+    local labelText = Instance.new("TextLabel")
+    labelText.Parent = frame
+    labelText.BackgroundTransparency = 1
+    labelText.Size = UDim2.new(1, -20, 0, 20)
+    labelText.Position = UDim2.new(0, 10, 0, 5)
+    labelText.Text = label
+    labelText.TextColor3 = Color3.fromRGB(235, 235, 240)
+    labelText.TextSize = 13
+    labelText.Font = Enum.Font.GothamBold
+    labelText.ZIndex = 1003
+    
+    local palette = Instance.new("ImageLabel")
+    palette.Parent = frame
+    palette.BackgroundColor3 = Color3.new(1, 1, 1)
+    palette.BorderSizePixel = 0
+    palette.Size = UDim2.new(1, -20, 0, 120)
+    palette.Position = UDim2.new(0, 10, 0, 30)
+    palette.ZIndex = 1003
+    ApplyCorner(palette, 6)
+    palette.ClipsDescendants = true
+    
+    local hueGradient = Instance.new("UIGradient")
+    hueGradient.Parent = palette
+    hueGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 128, 0)),
+        ColorSequenceKeypoint.new(0.33, Color3.fromRGB(255, 255, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 0)),
+        ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 255, 255)),
+        ColorSequenceKeypoint.new(0.83, Color3.fromRGB(0, 0, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 255))
+    })
+    
+    local whiteGradient = Instance.new("UIGradient")
+    whiteGradient.Parent = palette
+    whiteGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
+        ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
+    })
+    whiteGradient.Rotation = 90
+    whiteGradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0)
+    })
+    
+    local cursor = Instance.new("Frame")
+    cursor.Parent = palette
+    cursor.BackgroundColor3 = Color3.new(1, 1, 1)
+    cursor.BorderSizePixel = 2
+    cursor.BorderColor3 = Color3.new(0, 0, 0)
+    cursor.Size = UDim2.new(0, 16, 0, 16)
+    cursor.Position = UDim2.new(0.5, -8, 0.5, -8)
+    cursor.ZIndex = 1005
+    ApplyCorner(cursor, 8)
+    cursor.BackgroundTransparency = 0.3
+    
+    local brightnessLabel = Instance.new("TextLabel")
+    brightnessLabel.Parent = frame
+    brightnessLabel.BackgroundTransparency = 1
+    brightnessLabel.Size = UDim2.new(0, 50, 0, 20)
+    brightnessLabel.Position = UDim2.new(0, 10, 0, 155)
+    brightnessLabel.Text = "Яркость:"
+    brightnessLabel.TextColor3 = Color3.fromRGB(235, 235, 240)
+    brightnessLabel.TextSize = 11
+    brightnessLabel.Font = Enum.Font.Gotham
+    brightnessLabel.ZIndex = 1003
+    
+    local brightnessBg = Instance.new("Frame")
+    brightnessBg.Parent = frame
+    brightnessBg.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+    brightnessBg.BorderSizePixel = 0
+    brightnessBg.Size = UDim2.new(1, -70, 0, 16)
+    brightnessBg.Position = UDim2.new(0, 60, 0, 157)
+    brightnessBg.ZIndex = 1003
+    ApplyCorner(brightnessBg, 8)
+    
+    local brightnessGradient = Instance.new("UIGradient")
+    brightnessGradient.Parent = brightnessBg
+    brightnessGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
+        ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
+    })
+    
+    local brightnessButton = Instance.new("TextButton")
+    brightnessButton.Parent = brightnessBg
+    brightnessButton.BackgroundColor3 = Color3.fromRGB(235, 235, 240)
+    brightnessButton.BorderSizePixel = 2
+    brightnessButton.BorderColor3 = Color3.fromRGB(100, 100, 130)
+    brightnessButton.Size = UDim2.new(0, 20, 0, 20)
+    brightnessButton.Position = UDim2.new(1, -10, 0.5, -10)
+    brightnessButton.Text = ""
+    brightnessButton.ZIndex = 1005
+    brightnessButton.AutoButtonColor = false
+    ApplyCorner(brightnessButton, 10)
+    
+    local draggingPalette = false
+    local draggingBrightness = false
+    local currentHue = 0
+    local currentSaturation = 0
+    local currentValue = 1
+    
+    local initH, initS, initV = ColorToHSV(defaultColor)
+    currentHue = initH
+    currentSaturation = initS
+    currentValue = initV
+    
+    local function UpdateColor()
+        local color = HSVToColor(currentHue, currentSaturation, currentValue)
+        cursor.BackgroundColor3 = color
+        brightnessButton.Position = UDim2.new(currentValue, -10, 0.5, -10)
+        callback(color)
+    end
+    
+    local function GetColorFromPalette(relX, relY)
+        currentHue = relX
+        currentSaturation = relY
+        cursor.Position = UDim2.new(relX, -8, relY, -8)
+        UpdateColor()
+    end
+    
+    palette.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            draggingPalette = true
+            local relX = math.clamp((input.Position.X - palette.AbsolutePosition.X) / palette.AbsoluteSize.X, 0, 1)
+            local relY = math.clamp((input.Position.Y - palette.AbsolutePosition.Y) / palette.AbsoluteSize.Y, 0, 1)
+            GetColorFromPalette(relX, relY)
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if draggingPalette and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local relX = math.clamp((input.Position.X - palette.AbsolutePosition.X) / palette.AbsoluteSize.X, 0, 1)
+            local relY = math.clamp((input.Position.Y - palette.AbsolutePosition.Y) / palette.AbsoluteSize.Y, 0, 1)
+            GetColorFromPalette(relX, relY)
+        end
+    end)
+    
+    local function UpdateBrightness(mouseX)
+        local relX = math.clamp((mouseX - brightnessBg.AbsolutePosition.X) / brightnessBg.AbsoluteSize.X, 0, 1)
+        currentValue = relX
+        UpdateColor()
+    end
+    
+    brightnessBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            draggingBrightness = true
+            UpdateBrightness(input.Position.X)
+        end
+    end)
+    
+    brightnessButton.MouseButton1Down:Connect(function()
+        draggingBrightness = true
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if draggingBrightness and input.UserInputType == Enum.UserInputType.MouseMovement then
+            UpdateBrightness(input.Position.X)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            draggingPalette = false
+            draggingBrightness = false
+        end
+    end)
+    
+    cursor.Position = UDim2.new(currentHue, -8, currentSaturation, -8)
+    brightnessButton.Position = UDim2.new(currentValue, -10, 0.5, -10)
+    UpdateColor()
+    
+    return frame
+end
+
 -- === СОЗДАНИЕ GUI ===
 local function CreateMenu()
-    if _G.MenuGUI then
-        _G.MenuGUI:Destroy()
-        _G.MenuGUI = nil
-    end
+    if _G.MenuGUI then _G.MenuGUI:Destroy() _G.MenuGUI = nil end
     
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "XenoMenu"
@@ -175,21 +371,30 @@ local function CreateMenu()
         Yellow = Color3.fromRGB(200, 200, 60)
     }
     
-    -- ОСНОВНОЙ ФРЕЙМ
     local MainFrame = Instance.new("Frame")
     MainFrame.Parent = ScreenGui
     MainFrame.BackgroundColor3 = Colors.BG
     MainFrame.BackgroundTransparency = MenuTransparency
     MainFrame.BorderSizePixel = 0
-    MainFrame.Size = UDim2.new(0, 420, 0, 540)
-    MainFrame.Position = UDim2.new(0.5, -210, 0.5, -270)
+    MainFrame.Size = UDim2.new(0, 500, 0, 540)
+    MainFrame.Position = UDim2.new(0.5, -250, 0.5, -270)
     MainFrame.Active = true
-    MainFrame.Draggable = true
     MainFrame.ClipsDescendants = true
     MainFrame.ZIndex = 999
     ApplyCorner(MainFrame, 12)
     
-    -- ЗАГОЛОВОК
+    if SavedBackgroundID then
+        local savedImage = Instance.new("ImageLabel")
+        savedImage.Parent = MainFrame
+        savedImage.BackgroundTransparency = 1
+        savedImage.Size = UDim2.new(1, 0, 1, -40)
+        savedImage.Position = UDim2.new(0, 0, 0, 40)
+        savedImage.Image = SavedBackgroundID
+        savedImage.ZIndex = 998
+        savedImage.ScaleType = Enum.ScaleType.Crop
+        ApplyCorner(savedImage, 12)
+    end
+    
     local Header = Instance.new("Frame")
     Header.Parent = MainFrame
     Header.BackgroundColor3 = Colors.Accent
@@ -198,6 +403,30 @@ local function CreateMenu()
     Header.Size = UDim2.new(1, 0, 0, 40)
     Header.ZIndex = 1000
     ApplyCorner(Header, 12)
+    
+    local dragging = false
+    local dragOffset = Vector2.new(0, 0)
+    
+    Header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            local mousePos = UserInputService:GetMouseLocation()
+            dragOffset = Vector2.new(mousePos.X - MainFrame.AbsolutePosition.X, mousePos.Y - MainFrame.AbsolutePosition.Y)
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mousePos = UserInputService:GetMouseLocation()
+            MainFrame.Position = UDim2.new(0, mousePos.X - dragOffset.X, 0, mousePos.Y - dragOffset.Y)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
     
     local Title = Instance.new("TextLabel")
     Title.Parent = Header
@@ -230,18 +459,104 @@ local function CreateMenu()
         _G.MenuGUI = nil
     end)
     
-    -- ТАБЫ
+    -- Изменение размера окна
+    local resizing = false
+    local resizeEdge = nil
+    local minWidth = 300
+    local maxWidth = 800
+    local minHeight = 400
+    local maxHeight = 700
+    
+    local resizeHandle = Instance.new("TextButton")
+    resizeHandle.Parent = MainFrame
+    resizeHandle.BackgroundColor3 = Colors.Accent
+    resizeHandle.BackgroundTransparency = 0.5
+    resizeHandle.BorderSizePixel = 0
+    resizeHandle.Size = UDim2.new(0, 20, 0, 20)
+    resizeHandle.Position = UDim2.new(1, -20, 1, -20)
+    resizeHandle.Text = "◢"
+    resizeHandle.TextColor3 = Colors.Text
+    resizeHandle.TextSize = 12
+    resizeHandle.Font = Enum.Font.GothamBold
+    resizeHandle.ZIndex = 1002
+    resizeHandle.AutoButtonColor = false
+    ApplyCorner(resizeHandle, 4)
+    
+    local rightEdge = Instance.new("TextButton")
+    rightEdge.Parent = MainFrame
+    rightEdge.BackgroundTransparency = 1
+    rightEdge.BorderSizePixel = 0
+    rightEdge.Size = UDim2.new(0, 5, 1, -20)
+    rightEdge.Position = UDim2.new(1, -5, 0, 0)
+    rightEdge.Text = ""
+    rightEdge.ZIndex = 1001
+    rightEdge.AutoButtonColor = false
+    
+    local bottomEdge = Instance.new("TextButton")
+    bottomEdge.Parent = MainFrame
+    bottomEdge.BackgroundTransparency = 1
+    bottomEdge.BorderSizePixel = 0
+    bottomEdge.Size = UDim2.new(1, -20, 0, 5)
+    bottomEdge.Position = UDim2.new(0, 0, 1, -5)
+    bottomEdge.Text = ""
+    bottomEdge.ZIndex = 1001
+    bottomEdge.AutoButtonColor = false
+    
+    local function StartResize(edge)
+        resizing = true
+        resizeEdge = edge
+    end
+    
+    resizeHandle.MouseButton1Down:Connect(function()
+        StartResize("corner")
+    end)
+    
+    rightEdge.MouseButton1Down:Connect(function()
+        StartResize("right")
+    end)
+    
+    bottomEdge.MouseButton1Down:Connect(function()
+        StartResize("bottom")
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mousePos = UserInputService:GetMouseLocation()
+            local framePos = MainFrame.AbsolutePosition
+            local frameSize = MainFrame.AbsoluteSize
+            
+            if resizeEdge == "corner" or resizeEdge == "right" then
+                local newWidth = mousePos.X - framePos.X
+                newWidth = math.clamp(newWidth, minWidth, maxWidth)
+                MainFrame.Size = UDim2.new(0, newWidth, 0, frameSize.Y)
+            end
+            
+            if resizeEdge == "corner" or resizeEdge == "bottom" then
+                local newHeight = mousePos.Y - framePos.Y
+                newHeight = math.clamp(newHeight, minHeight, maxHeight)
+                MainFrame.Size = UDim2.new(0, MainFrame.AbsoluteSize.X, 0, newHeight)
+            end
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            resizing = false
+            resizeEdge = nil
+        end
+    end)
+    
     local TabContainer = Instance.new("Frame")
     TabContainer.Parent = MainFrame
     TabContainer.BackgroundColor3 = Colors.BG2
     TabContainer.BackgroundTransparency = 0.5
     TabContainer.BorderSizePixel = 0
-    TabContainer.Size = UDim2.new(1, 0, 0, 40)
+    TabContainer.Size = UDim2.new(0, 120, 1, -40)
     TabContainer.Position = UDim2.new(0, 0, 0, 40)
     TabContainer.ZIndex = 1000
     
     local tabs = {}
-    local tabNames = {"Телепорт", "Игрок", "Кастомизация"}
+    local tabNames = {"Телепорт", "Игрок", "Метки", "Кастомизация"}
     
     for i, name in ipairs(tabNames) do
         local btn = Instance.new("TextButton")
@@ -249,8 +564,8 @@ local function CreateMenu()
         btn.BackgroundColor3 = (i == 1) and Colors.Accent or Colors.BG3
         btn.BackgroundTransparency = (i == 1) and 0.1 or 0.2
         btn.BorderSizePixel = 0
-        btn.Size = UDim2.new(0.333, -2, 1, -6)
-        btn.Position = UDim2.new((i - 1) * 0.333 + 0.005, 0, 0, 3)
+        btn.Size = UDim2.new(1, -10, 0, 35)
+        btn.Position = UDim2.new(0, 5, 0, 10 + (i - 1) * 45)
         btn.Text = name
         btn.TextColor3 = (i == 1) and Colors.Text or Colors.TextDim
         btn.TextSize = 12
@@ -260,16 +575,15 @@ local function CreateMenu()
         tabs[i] = btn
     end
     
-    -- КОНТЕЙНЕРЫ
     local containers = {}
     
-    for i = 1, 3 do
+    for i = 1, 4 do
         local frame = Instance.new("ScrollingFrame")
         frame.Parent = MainFrame
         frame.BackgroundTransparency = 1
         frame.BorderSizePixel = 0
-        frame.Size = UDim2.new(1, 0, 1, -80)
-        frame.Position = UDim2.new(0, 0, 0, 80)
+        frame.Size = UDim2.new(1, -120, 1, -80)
+        frame.Position = UDim2.new(0, 120, 0, 80)
         frame.CanvasSize = UDim2.new(0, 0, 0, 0)
         frame.ScrollBarThickness = 4
         frame.ScrollBarImageColor3 = Colors.Border
@@ -285,7 +599,6 @@ local function CreateMenu()
         containers[i] = {frame = frame, container = container}
     end
     
-    -- ФУНКЦИЯ СОЗДАНИЯ СЛАЙДЕРА
     local function MakeSlider(parent, label, min, max, default, callback)
         local frame = Instance.new("Frame")
         frame.Parent = parent
@@ -364,19 +677,14 @@ local function CreateMenu()
         end
         
         button.MouseButton1Down:Connect(function() dragging = true end)
-        
         UserInputService.InputChanged:Connect(function(input)
             if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
                 UpdateSlider(input.Position.X)
             end
         end)
-        
         UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
-            end
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
         end)
-        
         bg.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 UpdateSlider(input.Position.X)
@@ -387,7 +695,6 @@ local function CreateMenu()
         return frame
     end
     
-    -- ФУНКЦИЯ СОЗДАНИЯ КНОПКИ
     local function MakeButton(parent, text, callback, color)
         local btn = Instance.new("TextButton")
         btn.Parent = parent
@@ -407,63 +714,6 @@ local function CreateMenu()
         return btn
     end
     
-    -- ФУНКЦИЯ СОЗДАНИЯ ВЫБОРА ЦВЕТА
-    local function CreateColorPicker(parent, label, defaultColor, callback, yPos)
-        local frame = Instance.new("Frame")
-        frame.Parent = parent
-        frame.BackgroundTransparency = 1
-        frame.Size = UDim2.new(1, -20, 0, 50)
-        frame.Position = UDim2.new(0, 10, 0, yPos or 0)
-        frame.ZIndex = 1002
-        
-        local labelText = Instance.new("TextLabel")
-        labelText.Parent = frame
-        labelText.BackgroundTransparency = 1
-        labelText.Size = UDim2.new(0.5, 0, 1, 0)
-        labelText.Text = label
-        labelText.TextColor3 = Colors.Text
-        labelText.TextSize = 14
-        labelText.TextXAlignment = Enum.TextXAlignment.Left
-        labelText.Font = Enum.Font.Gotham
-        labelText.ZIndex = 1003
-        
-        local colors = {
-            Color3.fromRGB(28, 28, 33),
-            Color3.fromRGB(40, 40, 80),
-            Color3.fromRGB(80, 40, 40),
-            Color3.fromRGB(40, 80, 40),
-            Color3.fromRGB(80, 80, 40),
-            Color3.fromRGB(40, 40, 40),
-            Color3.fromRGB(60, 60, 60),
-            Color3.fromRGB(20, 20, 50)
-        }
-        
-        for i, color in ipairs(colors) do
-            local btn = Instance.new("TextButton")
-            btn.Parent = frame
-            btn.BackgroundColor3 = color
-            btn.BorderSizePixel = 2
-            btn.BorderColor3 = (defaultColor == color) and Colors.Text or Colors.Border
-            btn.Size = UDim2.new(0.1, -2, 0, 30)
-            btn.Position = UDim2.new(0.5 + (i - 1) * 0.06, 0, 0.5, -15)
-            btn.Text = ""
-            btn.ZIndex = 1003
-            ApplyCorner(btn, 15)
-            
-            btn.MouseButton1Click:Connect(function()
-                callback(color)
-                for _, b in pairs(frame:GetChildren()) do
-                    if b:IsA("TextButton") then
-                        b.BorderColor3 = (b.BackgroundColor3 == color) and Colors.Text or Colors.Border
-                    end
-                end
-            end)
-        end
-        
-        return frame
-    end
-    
-    -- ОБНОВЛЕНИЕ СПИСКА ИГРОКОВ
     local function UpdatePlayers()
         local container = containers[1].container
         for _, child in pairs(container:GetChildren()) do child:Destroy() end
@@ -505,7 +755,6 @@ local function CreateMenu()
             y = y + 55
         else
             for i, data in ipairs(players) do
-                -- Кнопка игрока
                 local btn = Instance.new("TextButton")
                 btn.Parent = container
                 btn.BackgroundColor3 = (i % 2 == 0) and Colors.BG2 or Colors.BG3
@@ -528,7 +777,6 @@ local function CreateMenu()
                     end
                 end)
                 
-                -- Имя игрока
                 local nameLabel = Instance.new("TextLabel")
                 nameLabel.Parent = btn
                 nameLabel.BackgroundTransparency = 1
@@ -541,7 +789,6 @@ local function CreateMenu()
                 nameLabel.Font = Enum.Font.Gotham
                 nameLabel.ZIndex = 1003
                 
-                -- Команда игрока
                 local teamLabel = Instance.new("TextLabel")
                 teamLabel.Parent = btn
                 teamLabel.BackgroundTransparency = 1
@@ -554,7 +801,6 @@ local function CreateMenu()
                 teamLabel.Font = Enum.Font.GothamBold
                 teamLabel.ZIndex = 1003
                 
-                -- Дистанция
                 local distLabel = Instance.new("TextLabel")
                 distLabel.Parent = btn
                 distLabel.BackgroundTransparency = 1
@@ -567,7 +813,6 @@ local function CreateMenu()
                 distLabel.Font = Enum.Font.Gotham
                 distLabel.ZIndex = 1003
                 
-                -- Полоска здоровья
                 local hpBg = Instance.new("Frame")
                 hpBg.Parent = btn
                 hpBg.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
@@ -587,7 +832,6 @@ local function CreateMenu()
                 hpFill.ZIndex = 1004
                 ApplyCorner(hpFill, 4)
                 
-                -- Текст здоровья
                 local hpText = Instance.new("TextLabel")
                 hpText.Parent = btn
                 hpText.BackgroundTransparency = 1
@@ -608,27 +852,25 @@ local function CreateMenu()
         container.Size = UDim2.new(1, 0, 0, y + 10)
     end
     
-    -- UI ИГРОКА
     local function CreatePlayerUI()
         local container = containers[2].container
         for _, child in pairs(container:GetChildren()) do child:Destroy() end
         
         local y = 10
         
-        -- Заголовок полета
         local flyTitle = Instance.new("TextLabel")
         flyTitle.Parent = container
         flyTitle.BackgroundTransparency = 1
         flyTitle.Size = UDim2.new(1, -20, 0, 25)
         flyTitle.Position = UDim2.new(0, 10, 0, y)
-        flyTitle.Text = "ПОЛЕТ"
+        flyTitle.Text = "ПОЛЕТ (Клавиша F)"
         flyTitle.TextColor3 = Colors.Accent2
         flyTitle.TextSize = 16
         flyTitle.Font = Enum.Font.GothamBold
         flyTitle.ZIndex = 1002
         y = y + 30
         
-        local flyButton = MakeButton(container, FlyEnabled and "Выключить полет" or "Включить полет", function()
+        local flyButton = MakeButton(container, FlyEnabled and "Выключить полет (F)" or "Включить полет (F)", function()
             if FlyEnabled then StopFly() else StartFly() end
             CreatePlayerUI()
         end, FlyEnabled and Colors.Red or Colors.Green)
@@ -676,7 +918,6 @@ local function CreateMenu()
         end
         y = y + 42
         
-        -- Разделитель
         local separator = Instance.new("Frame")
         separator.Parent = container
         separator.BackgroundColor3 = Colors.Border
@@ -686,7 +927,6 @@ local function CreateMenu()
         separator.ZIndex = 1002
         y = y + 15
         
-        -- Характеристики
         local charTitle = Instance.new("TextLabel")
         charTitle.Parent = container
         charTitle.BackgroundTransparency = 1
@@ -715,9 +955,7 @@ local function CreateMenu()
         
         local gravitySlider = MakeSlider(container, "Гравитация", 0, 300, PlayerGravity, function(val)
             PlayerGravity = val
-            if not FlyEnabled then
-                ApplyCharacteristics()
-            end
+            if not FlyEnabled then ApplyCharacteristics() end
         end)
         gravitySlider.Position = UDim2.new(0, 0, 0, y)
         y = y + 70
@@ -726,9 +964,124 @@ local function CreateMenu()
         container.Size = UDim2.new(1, 0, 0, y + 10)
     end
     
-    -- UI КАСТОМИЗАЦИИ
-    local function CreateCustomUI()
+    local function CreateMarksUI()
         local container = containers[3].container
+        for _, child in pairs(container:GetChildren()) do child:Destroy() end
+        
+        local y = 10
+        
+        local title = Instance.new("TextLabel")
+        title.Parent = container
+        title.BackgroundTransparency = 1
+        title.Size = UDim2.new(1, -20, 0, 25)
+        title.Position = UDim2.new(0, 10, 0, y)
+        title.Text = "МЕТКИ"
+        title.TextColor3 = Colors.Accent2
+        title.TextSize = 16
+        title.Font = Enum.Font.GothamBold
+        title.ZIndex = 1002
+        y = y + 30
+        
+        local addCurrentBtn = MakeButton(container, "Добавить текущую позицию", function()
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local pos = char.HumanoidRootPart.Position
+                table.insert(Marks, {Name = "Метка " .. #Marks + 1, Position = pos})
+                _G.XenoMarks = Marks
+                CreateMarksUI()
+            end
+        end, Colors.Green)
+        addCurrentBtn.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
+        
+        if #Marks == 0 then
+            local empty = Instance.new("TextLabel")
+            empty.Parent = container
+            empty.BackgroundTransparency = 1
+            empty.Size = UDim2.new(1, -20, 0, 50)
+            empty.Position = UDim2.new(0, 10, 0, y)
+            empty.Text = "Нет меток"
+            empty.TextColor3 = Colors.TextDim
+            empty.TextSize = 16
+            empty.Font = Enum.Font.Gotham
+            empty.ZIndex = 1002
+            y = y + 55
+        else
+            for i, mark in ipairs(Marks) do
+                local markFrame = Instance.new("Frame")
+                markFrame.Parent = container
+                markFrame.BackgroundColor3 = Colors.BG2
+                markFrame.BackgroundTransparency = 0.3
+                markFrame.BorderSizePixel = 1
+                markFrame.BorderColor3 = Colors.Border
+                markFrame.Size = UDim2.new(1, -20, 0, 60)
+                markFrame.Position = UDim2.new(0, 10, 0, y)
+                markFrame.ZIndex = 1002
+                ApplyCorner(markFrame, 8)
+                
+                local markName = Instance.new("TextLabel")
+                markName.Parent = markFrame
+                markName.BackgroundTransparency = 1
+                markName.Size = UDim2.new(0.6, 0, 0, 20)
+                markName.Position = UDim2.new(0, 10, 0, 5)
+                markName.Text = mark.Name
+                markName.TextColor3 = Colors.Text
+                markName.TextSize = 13
+                markName.TextXAlignment = Enum.TextXAlignment.Left
+                markName.Font = Enum.Font.GothamBold
+                markName.ZIndex = 1003
+                
+                local tpBtn = Instance.new("TextButton")
+                tpBtn.Parent = markFrame
+                tpBtn.BackgroundColor3 = Colors.Green
+                tpBtn.BackgroundTransparency = 0.2
+                tpBtn.BorderSizePixel = 1
+                tpBtn.BorderColor3 = Colors.Border
+                tpBtn.Size = UDim2.new(0.2, 0, 0, 30)
+                tpBtn.Position = UDim2.new(0.75, 0, 0, 15)
+                tpBtn.Text = "TP"
+                tpBtn.TextColor3 = Colors.Text
+                tpBtn.TextSize = 12
+                tpBtn.Font = Enum.Font.GothamBold
+                tpBtn.ZIndex = 1003
+                ApplyCorner(tpBtn, 6)
+                tpBtn.MouseButton1Click:Connect(function()
+                    local char = LocalPlayer.Character
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        char.HumanoidRootPart.CFrame = CFrame.new(mark.Position)
+                    end
+                end)
+                
+                local delBtn = Instance.new("TextButton")
+                delBtn.Parent = markFrame
+                delBtn.BackgroundColor3 = Colors.Red
+                delBtn.BackgroundTransparency = 0.2
+                delBtn.BorderSizePixel = 1
+                delBtn.BorderColor3 = Colors.Border
+                delBtn.Size = UDim2.new(0.1, 0, 0, 30)
+                delBtn.Position = UDim2.new(0.88, 0, 0, 15)
+                delBtn.Text = "X"
+                delBtn.TextColor3 = Colors.Text
+                delBtn.TextSize = 12
+                delBtn.Font = Enum.Font.GothamBold
+                delBtn.ZIndex = 1003
+                ApplyCorner(delBtn, 6)
+                delBtn.MouseButton1Click:Connect(function()
+                    table.remove(Marks, i)
+                    _G.XenoMarks = Marks
+                    CreateMarksUI()
+                end)
+                
+                y = y + 65
+            end
+        end
+        
+        containers[3].frame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+        container.Size = UDim2.new(1, 0, 0, y + 10)
+    end
+    
+    local function CreateCustomUI()
+        local container = containers[4].container
         for _, child in pairs(container:GetChildren()) do child:Destroy() end
         
         local y = 10
@@ -745,11 +1098,18 @@ local function CreateMenu()
         title.ZIndex = 1002
         y = y + 35
         
-        CreateColorPicker(container, "Цвет фона:", MenuColor, function(color)
+        local bgPalette = CreateColorPalette(container, "Цвет фона:", MenuColor, function(color)
             MenuColor = color
             MainFrame.BackgroundColor3 = color
         end, y)
-        y = y + 55
+        y = y + 210
+        
+        local accentPalette = CreateColorPalette(container, "Цвет акцента:", AccentColor, function(color)
+            AccentColor = color
+            Colors.Accent = color
+            Header.BackgroundColor3 = color
+        end, y)
+        y = y + 210
         
         local transSlider = MakeSlider(container, "Прозрачность", 0, 0.5, MenuTransparency, function(val)
             MenuTransparency = val
@@ -758,14 +1118,122 @@ local function CreateMenu()
         transSlider.Position = UDim2.new(0, 0, 0, y)
         y = y + 70
         
-        CreateColorPicker(container, "Цвет акцента:", AccentColor, function(color)
-            AccentColor = color
-            Colors.Accent = color
-            Header.BackgroundColor3 = color
-        end, y)
-        y = y + 55
+        -- Кнопка обновления галереи (исправленная генерация через Random.new)
+        local refreshBtn = MakeButton(container, "Обновить галерею", function()
+            GalleryImages = {}
+            local rng = Random.new()
+            for i = 1, 30 do
+                local id = rng:NextInteger(1000000, 99999999)
+                table.insert(GalleryImages, {
+                    Name = "IMG #" .. id,
+                    ID = "rbxassetid://" .. id
+                })
+            end
+            CreateCustomUI()
+        end, Colors.Green)
+        refreshBtn.Position = UDim2.new(0, 10, 0, y)
+        y = y + 50
         
-        -- Надписи об авторах
+        local galleryTitle = Instance.new("TextLabel")
+        galleryTitle.Parent = container
+        galleryTitle.BackgroundTransparency = 1
+        galleryTitle.Size = UDim2.new(1, -20, 0, 25)
+        galleryTitle.Position = UDim2.new(0, 10, 0, y)
+        galleryTitle.Text = "ГАЛЕРЕЯ"
+        galleryTitle.TextColor3 = Colors.Accent2
+        galleryTitle.TextSize = 14
+        galleryTitle.Font = Enum.Font.GothamBold
+        galleryTitle.ZIndex = 1002
+        y = y + 30
+        
+        if #GalleryImages == 0 then
+            local rng = Random.new()
+            for i = 1, 30 do
+                local id = rng:NextInteger(1000000, 99999999)
+                table.insert(GalleryImages, {
+                    Name = "IMG #" .. id,
+                    ID = "rbxassetid://" .. id
+                })
+            end
+        end
+        
+        local columns = 3
+        local imageWidth = 120
+        local imageHeight = 80
+        local spacing = 5
+        
+        for i, img in ipairs(GalleryImages) do
+            local col = (i - 1) % columns
+            local row = math.floor((i - 1) / columns)
+            
+            local imgFrame = Instance.new("Frame")
+            imgFrame.Name = "GalleryItem"
+            imgFrame.Parent = container
+            imgFrame.BackgroundColor3 = Colors.BG2
+            imgFrame.BorderSizePixel = 1
+            imgFrame.BorderColor3 = Colors.Border
+            imgFrame.Size = UDim2.new(0, imageWidth, 0, imageHeight + 20)
+            imgFrame.Position = UDim2.new(0, 10 + col * (imageWidth + spacing), 0, y + row * (imageHeight + 25))
+            imgFrame.ZIndex = 1002
+            ApplyCorner(imgFrame, 6)
+            
+            local imgButton = Instance.new("ImageButton")
+            imgButton.Parent = imgFrame
+            imgButton.BackgroundColor3 = Colors.BG3
+            imgButton.BorderSizePixel = 0
+            imgButton.Size = UDim2.new(1, -2, 0, imageHeight)
+            imgButton.Position = UDim2.new(0, 1, 0, 1)
+            imgButton.Image = img.ID
+            imgButton.ScaleType = Enum.ScaleType.Crop
+            imgButton.ZIndex = 1003
+            ApplyCorner(imgButton, 5)
+            imgButton.AutoButtonColor = false
+            
+            local nameLabel = Instance.new("TextLabel")
+            nameLabel.Parent = imgFrame
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Size = UDim2.new(1, 0, 0, 15)
+            nameLabel.Position = UDim2.new(0, 3, 0, imageHeight + 3)
+            nameLabel.Text = img.Name
+            nameLabel.TextColor3 = Colors.Text
+            nameLabel.TextSize = 8
+            nameLabel.Font = Enum.Font.Gotham
+            nameLabel.ZIndex = 1003
+            
+            imgButton.MouseButton1Click:Connect(function()
+                for _, child in pairs(MainFrame:GetChildren()) do
+                    if child:IsA("ImageLabel") then
+                        child:Destroy()
+                    end
+                end
+                local image = Instance.new("ImageLabel")
+                image.Parent = MainFrame
+                image.BackgroundTransparency = 1
+                image.Size = UDim2.new(1, 0, 1, -40)
+                image.Position = UDim2.new(0, 0, 0, 40)
+                image.Image = img.ID
+                image.ZIndex = 998
+                image.ScaleType = Enum.ScaleType.Crop
+                ApplyCorner(image, 12)
+                SavedBackgroundID = img.ID
+                _G.XenoBackgroundID = img.ID
+            end)
+        end
+        
+        local pagesY = y + math.ceil(#GalleryImages / columns) * (imageHeight + 25) + 10
+        
+        local removeBtn = MakeButton(container, "Убрать фон", function()
+            SavedBackgroundID = nil
+            _G.XenoBackgroundID = nil
+            for _, child in pairs(MainFrame:GetChildren()) do
+                if child:IsA("ImageLabel") then
+                    child:Destroy()
+                end
+            end
+        end, Colors.Red)
+        removeBtn.Position = UDim2.new(0, 10, 0, pagesY)
+        pagesY = pagesY + 50
+        
         local credits = {
             "Made by creator (babykity)",
             "Telegram: @minexcfu",
@@ -773,45 +1241,70 @@ local function CreateMenu()
             "Helper (no) kakaroldod"
         }
         
+        local creditY = pagesY
         for _, credit in ipairs(credits) do
             local label = Instance.new("TextLabel")
             label.Parent = container
             label.BackgroundTransparency = 1
             label.Size = UDim2.new(1, -20, 0, 20)
-            label.Position = UDim2.new(0, 10, 0, y)
+            label.Position = UDim2.new(0, 10, 0, creditY)
             label.Text = credit
             label.TextColor3 = Colors.TextDim
             label.TextSize = 12
             label.Font = Enum.Font.Gotham
             label.ZIndex = 1002
-            y = y + 25
+            creditY = creditY + 25
         end
         
-        containers[3].frame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
-        container.Size = UDim2.new(1, 0, 0, y + 10)
+        containers[4].frame.CanvasSize = UDim2.new(0, 0, 0, creditY + 50)
+        container.Size = UDim2.new(1, 0, 0, creditY + 50)
     end
     
-    -- Переключение табов
-    for i = 1, 3 do
-        tabs[i].MouseButton1Click:Connect(function()
-            for j = 1, 3 do
-                tabs[j].BackgroundColor3 = (j == i) and Colors.Accent or Colors.BG3
-                tabs[j].BackgroundTransparency = (j == i) and 0.1 or 0.2
-                tabs[j].TextColor3 = (j == i) and Colors.Text or Colors.TextDim
-                containers[j].frame.Visible = (j == i)
+    local function SwitchTab(tabIndex)
+        for j = 1, 4 do
+            local isActive = (j == tabIndex)
+            local targetColor = isActive and Colors.Accent or Colors.BG3
+            local targetTransparency = isActive and 0.1 or 0.2
+            local targetTextColor = isActive and Colors.Text or Colors.TextDim
+            TweenService:Create(tabs[j], TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                BackgroundColor3 = targetColor,
+                BackgroundTransparency = targetTransparency,
+                TextColor3 = targetTextColor
+            }):Play()
+            if isActive then
+                containers[j].frame.Visible = true
+                containers[j].frame.Position = UDim2.new(0, 140, 0, 80)
+                TweenService:Create(containers[j].frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Position = UDim2.new(0, 120, 0, 80)
+                }):Play()
+            else
+                containers[j].frame.Visible = false
             end
-            if i == 1 then UpdatePlayers()
-            elseif i == 2 then CreatePlayerUI()
-            elseif i == 3 then CreateCustomUI() end
+        end
+        if tabIndex == 1 then UpdatePlayers()
+        elseif tabIndex == 2 then CreatePlayerUI()
+        elseif tabIndex == 3 then CreateMarksUI()
+        elseif tabIndex == 4 then CreateCustomUI() end
+    end
+    
+    for i = 1, 4 do
+        tabs[i].MouseButton1Click:Connect(function()
+            SwitchTab(i)
         end)
     end
     
-    -- Инициализация
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if input.KeyCode == Enum.KeyCode.F and not gameProcessed then
+            if FlyEnabled then StopFly() else StartFly() end
+            if containers[2].frame.Visible then CreatePlayerUI() end
+        end
+    end)
+    
     UpdatePlayers()
     CreatePlayerUI()
+    CreateMarksUI()
     CreateCustomUI()
 end
 
--- Запуск меню
 CreateMenu()
 print("XENO MENU успешно запущен!")
