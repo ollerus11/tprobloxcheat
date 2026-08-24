@@ -668,6 +668,85 @@ local function CreateMenu()
         _G.MenuGUI = nil
     end)
     
+    -- ИЗМЕНЕНИЕ РАЗМЕРА ОКНА
+    local resizing = false
+    local resizeEdge = nil
+    local minWidth = 400
+    local maxWidth = 1000
+    local minHeight = 400
+    local maxHeight = 800
+    
+    local resizeHandle = Instance.new("TextButton")
+    resizeHandle.Parent = MainFrame
+    resizeHandle.BackgroundColor3 = Colors.Accent
+    resizeHandle.BackgroundTransparency = 0.5
+    resizeHandle.BorderSizePixel = 0
+    resizeHandle.Size = UDim2.new(0, 20, 0, 20)
+    resizeHandle.Position = UDim2.new(1, -20, 1, -20)
+    resizeHandle.Text = "◢"
+    resizeHandle.TextColor3 = Colors.Text
+    resizeHandle.TextSize = 12
+    resizeHandle.Font = Enum.Font.GothamBold
+    resizeHandle.ZIndex = 1002
+    resizeHandle.AutoButtonColor = false
+    ApplyCorner(resizeHandle, 4)
+    
+    local rightEdge = Instance.new("TextButton")
+    rightEdge.Parent = MainFrame
+    rightEdge.BackgroundTransparency = 1
+    rightEdge.BorderSizePixel = 0
+    rightEdge.Size = UDim2.new(0, 5, 1, -20)
+    rightEdge.Position = UDim2.new(1, -5, 0, 0)
+    rightEdge.Text = ""
+    rightEdge.ZIndex = 1001
+    rightEdge.AutoButtonColor = false
+    
+    local bottomEdge = Instance.new("TextButton")
+    bottomEdge.Parent = MainFrame
+    bottomEdge.BackgroundTransparency = 1
+    bottomEdge.BorderSizePixel = 0
+    bottomEdge.Size = UDim2.new(1, -20, 0, 5)
+    bottomEdge.Position = UDim2.new(0, 0, 1, -5)
+    bottomEdge.Text = ""
+    bottomEdge.ZIndex = 1001
+    bottomEdge.AutoButtonColor = false
+    
+    local function StartResize(edge)
+        resizing = true
+        resizeEdge = edge
+    end
+    
+    resizeHandle.MouseButton1Down:Connect(function() StartResize("corner") end)
+    rightEdge.MouseButton1Down:Connect(function() StartResize("right") end)
+    bottomEdge.MouseButton1Down:Connect(function() StartResize("bottom") end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mousePos = UserInputService:GetMouseLocation()
+            local framePos = MainFrame.AbsolutePosition
+            local frameSize = MainFrame.AbsoluteSize
+            
+            if resizeEdge == "corner" or resizeEdge == "right" then
+                local newWidth = mousePos.X - framePos.X
+                newWidth = math.clamp(newWidth, minWidth, maxWidth)
+                MainFrame.Size = UDim2.new(0, newWidth, 0, frameSize.Y)
+            end
+            
+            if resizeEdge == "corner" or resizeEdge == "bottom" then
+                local newHeight = mousePos.Y - framePos.Y
+                newHeight = math.clamp(newHeight, minHeight, maxHeight)
+                MainFrame.Size = UDim2.new(0, MainFrame.AbsoluteSize.X, 0, newHeight)
+            end
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            resizing = false
+            resizeEdge = nil
+        end
+    end)
+    
     local TabContainer = Instance.new("Frame")
     TabContainer.Parent = MainFrame
     TabContainer.BackgroundColor3 = Colors.BG2
@@ -1437,7 +1516,6 @@ local function CreateMenu()
         end, y)
         y = y + 210
         
-        -- Rainbow для фона (с сохранением)
         local bgRainbowToggle = CreateRainbowToggle(container, function(enabled)
             BGRainbow = enabled
             _G.XenoBGRainbow = enabled
@@ -1463,7 +1541,6 @@ local function CreateMenu()
         end, y)
         y = y + 210
         
-        -- Rainbow для акцента (с сохранением)
         local accentRainbowToggle = CreateRainbowToggle(container, function(enabled)
             AccentRainbow = enabled
             _G.XenoAccentRainbow = enabled
